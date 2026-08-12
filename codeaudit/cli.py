@@ -1,4 +1,4 @@
-﻿"""Command-line interface for CodeAudit."""
+"""Command-line interface for CodeAudit."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import click
 
 from codeaudit.output.json_output import dump_json
 from codeaudit.output.markdown_output import dump_markdown
-from codeaudit.scan import scan
+from codeaudit.scan import _import_all_rules, scan
 
 
 @click.group()
@@ -26,11 +26,9 @@ def scan_cmd(paths, output, lang, ai):
         paths = ["."]
     click.echo(f"Scanning {len(paths)} path(s)...")
     findings = scan([Path(p) for p in paths], lang=lang)
-
     if not findings:
         click.echo("No issues found. Good job!")
         return
-
     if output == "json":
         click.echo(dump_json(findings, lang=lang))
     else:
@@ -40,8 +38,8 @@ def scan_cmd(paths, output, lang, ai):
 @main.command()
 def rules():
     """List all registered audit rules."""
+    _import_all_rules()
     from codeaudit.rules.base import all_rules
-
     for cls in all_rules():
         r = cls()
         click.echo(f"  {r.id:6s}  {r.severity.value:8s}  {r.name}")

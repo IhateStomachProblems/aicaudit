@@ -1,6 +1,8 @@
-import ast
+﻿import os
+proj_dir = r"C:\Users\17390\Desktop\开源git项目\codeaudit"
 
-from codeaudit.rules.base import Finding, Rule, Severity, register
+content = '''import ast
+from codeaudit.rules.base import Rule, Severity, Finding, register
 
 DANGEROUS_METHODS = {"execute", "executemany", "executescript"}
 SQL_KEYWORDS = {"select", "insert", "update", "delete", "create", "drop", "alter"}
@@ -95,3 +97,8 @@ class SqlInjection(Rule):
             snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
             fix="Use parameterized queries: cursor.execute('SELECT * FROM t WHERE id = ?', (id,))",
         )
+'''
+
+with open(os.path.join(proj_dir, "codeaudit", "rules", "security", "sql_injection.py"), "w", encoding="utf-8") as f:
+    f.write(content)
+print("sql_injection.py fixed")

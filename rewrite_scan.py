@@ -1,4 +1,7 @@
-"""Scan engine: collects files, runs rules, aggregates findings."""
+﻿import os
+proj_dir = r"C:\Users\17390\Desktop\开源git项目\codeaudit"
+
+content = '''"""Scan engine: collects files, runs rules, aggregates findings."""
 
 import ast
 import time
@@ -57,16 +60,14 @@ def scan(paths, lang="en"):
 
 
 def _import_all_rules():
-    import codeaudit.rules.performance.complexity
-    import codeaudit.rules.performance.nesting_depth
-    import codeaudit.rules.quality.bare_except
-    import codeaudit.rules.quality.magic_numbers
-    import codeaudit.rules.quality.todo_comment
-    import codeaudit.rules.quality.undefined_name
-    import codeaudit.rules.quality.unused_variable
-    import codeaudit.rules.security.dangerous_functions
-    import codeaudit.rules.security.secret_leak
     import codeaudit.rules.security.sql_injection  # noqa: F401
+    import codeaudit.rules.security.secret_leak  # noqa: F401
+    import codeaudit.rules.security.dangerous_functions  # noqa: F401
+    import codeaudit.rules.quality.bare_except  # noqa: F401
+    import codeaudit.rules.quality.magic_numbers  # noqa: F401
+    import codeaudit.rules.quality.undefined_name  # noqa: F401
+    import codeaudit.rules.quality.todo_comment  # noqa: F401
+    import codeaudit.rules.quality.unused_variable  # noqa: F401
 
 
 def _print_summary(findings, file_count, elapsed, lang):
@@ -75,7 +76,12 @@ def _print_summary(findings, file_count, elapsed, lang):
         sev = f.severity.value
         counts[sev] = counts.get(sev, 0) + 1
 
-    print(f"\nScan complete: {file_count} files, {len(findings)} findings, {elapsed:.2f}s")
+    print(f"\\nScan complete: {file_count} files, {len(findings)} findings, {elapsed:.2f}s")
     for sev in ("critical", "error", "warning", "info"):
         if sev in counts:
             print(f"  [{sev.upper()}] {counts[sev]}")
+'''
+
+with open(os.path.join(proj_dir, "codeaudit", "scan.py"), "w", encoding="utf-8") as f:
+    f.write(content)
+print("scan.py rewritten")
