@@ -1,17 +1,22 @@
-import ast
+﻿import ast
 
 from codeaudit.rules.base import Finding, Rule, Severity, register
 
 ALLOWED = {0, 1, -1, 100}
 
+# Numbers commonly used in logic (ranges, indexes, counters) - skip these
+COMMON_LOGIC_NUMBERS = {2, 3, 4, 5, 6, 7, 8, 9, 10, 16, 32, 64, 128, 256}
 
-def _is_module_const(node, value):
-    """Skip named constants like MAX_DEPTH = 3 or ERROR_AT = 15."""
-    if isinstance(node, ast.Assign) and len(node.targets) == 1:
-        target = node.targets[0]
-        if isinstance(target, ast.Name) and target.id.isupper():
-            return True
-    return False
+
+def _module_const_targets(tree):
+    """Pre-build the set of Constant objects that are module-level named constants."""
+    consts = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id.isupper() and isinstance(node.value, ast.Constant):
+                    consts.add(id(node.value))
+    return consts
 
 
 @register
@@ -23,22 +28,21 @@ class MagicNumbers(Rule):
     description_zh = "检测未命名的数字字面量（魔法数字）"
 
     def check(self, tree, context):
+        # Precompute named constants once (not per node)
+        named_consts = _module_const_targets(tree)
         findings = []
         for node in ast.walk(tree):
             if not isinstance(node, ast.Constant):
                 continue
-            if not isinstance(node.value, (int, float)):
+            if not isinstance(node.value, int):
                 continue
-            if node.value in ALLOWED:
+            if node.value in ALLOWED or node.value in COMMON_LOGIC_NUMBERS:
                 continue
-            if isinstance(node.value, float):
+            # Negative numbers handled by value check below
+            if abs(node.value) <= 10:
                 continue
-            if not isinstance(node.value, int) or abs(node.value) <= 10:
-                continue
-            # Skip if it's part of a constant assignment (named)
-            parent = next((p for p in ast.walk(tree) if isinstance(p, ast.Assign)
-                           and p.value is node), None)
-            if parent and _is_module_const(parent, node.value):
+            # Named constant assignment is acceptable
+            if id(node) in named_consts:
                 continue
             findings.append(Finding(
                 rule_id=self.id,

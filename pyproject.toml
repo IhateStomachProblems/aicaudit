@@ -13,3 +13,7 @@ dependencies = ["click>=8.0"]
 
 [project.scripts]
 codeaudit = "codeaudit.cli:main"
+
+[tool.ruff.lint.per-file-ignores]
+# Example files are intentionally bad - they demonstrate what CodeAudit finds
+"examples/*.py" = ["ALL"]

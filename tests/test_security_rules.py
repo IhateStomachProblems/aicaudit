@@ -1,13 +1,12 @@
-"""Tests for security rules."""
+﻿"""Tests for security rules."""
 
 import ast
 from pathlib import Path
-from unittest.mock import Mock
 
 from codeaudit.rules.base import ScanContext, Severity
-from codeaudit.rules.security.sql_injection import SqlInjection
-from codeaudit.rules.security.secret_leak import SecretLeak
 from codeaudit.rules.security.dangerous_functions import DangerousFunctions
+from codeaudit.rules.security.secret_leak import SecretLeak
+from codeaudit.rules.security.sql_injection import SqlInjection
 
 
 def make_context(code):
@@ -58,3 +57,4 @@ def test_dangerous_safe_call():
     tree, ctx = make_context(code)
     findings = DangerousFunctions().check(tree, ctx)
     assert len(findings) == 0
+

@@ -34,6 +34,7 @@ def test_complexity_detected():
     tree, ctx = make_context(code)
     findings = Complexity().check(tree, ctx)
     assert len(findings) >= 1
+    assert findings[0].severity.value in ("warning", "error")
 
 
 def test_complexity_simple_safe():

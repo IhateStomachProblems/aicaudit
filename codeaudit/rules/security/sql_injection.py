@@ -21,14 +21,6 @@ def _join_text(node):
     return None
 
 
-def _is_f_string(node):
-    return isinstance(node, ast.JoinedStr)
-
-
-def _is_string_concat(node):
-    return isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
-
-
 def _contains_sql(text):
     lower = text.lower().strip()
     return any(lower.startswith(kw) for kw in SQL_KEYWORDS)
@@ -60,11 +52,12 @@ class SqlInjection(Rule):
                 continue
             if not node.args:
                 continue
-            sql_arg = node.args[0]
 
+            sql_arg = node.args[0]
             text = _join_text(sql_arg)
+
+            # A variable passed to execute - flag unless parameterized
             if text is None:
-                # A variable passed to execute - worth flagging if not parametrized
                 if not _is_parametrized(node):
                     findings.append(self._make(sql_arg, context))
                 continue
@@ -76,11 +69,9 @@ class SqlInjection(Rule):
             if _is_parametrized(node):
                 continue
 
-            if _is_f_string(sql_arg) or _is_string_concat(sql_arg):
-                findings.append(self._make(sql_arg, context))
-            else:
-                # Plain string literal - could still be risky if dynamic
-                findings.append(self._make(sql_arg, context))
+            # Non-parameterized SQL: f-strings, concatenation, or plain literal
+            # are all injection risks when built without parameters
+            findings.append(self._make(sql_arg, context))
 
         return findings
 
