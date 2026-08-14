@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from codeaudit.config import find_project_root, merge_config
 from codeaudit.output.json_output import dump_json
 from codeaudit.output.markdown_output import dump_markdown
 from codeaudit.scan import _import_all_rules, scan
@@ -17,18 +18,38 @@ def main():
 
 @main.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Choice(["json", "markdown"]), default="markdown")
-@click.option("--lang", type=click.Choice(["en", "zh"]), default="en")
+@click.option("--output", "-o", type=click.Choice(["json", "markdown"]), default="markdown",
+              help="Output format: json or markdown")
+@click.option("--lang", type=click.Choice(["en", "zh"]), default="en",
+              help="Output language: en or zh")
 @click.option("--ai", is_flag=True, help="Use AI to verify findings (experimental)")
-def scan_cmd(paths, output, lang, ai):
+@click.option("--rules", default=None,
+              help="Comma-separated rule IDs to run, e.g. --rules S001,Q001")
+@click.option("--min-severity", type=click.Choice(["info", "warning", "error", "critical"]),
+              default=None, help="Minimum severity to report")
+def scan_cmd(paths, output, lang, ai, rules, min_severity):
     """Scan Python files for code issues."""
     if not paths:
         paths = ["."]
+
+    start = Path(paths[0])
+    # Load config (file + CLI overrides)
+    cfg = merge_config(rules, min_severity, start)
+
     click.echo(f"Scanning {len(paths)} path(s)...")
-    findings = scan([Path(p) for p in paths], lang=lang)
+    findings = scan(
+        [Path(p) for p in paths],
+        lang=lang,
+        rules=cfg.rules or None,
+        min_severity=cfg.min_severity,
+        ignore_patterns=cfg.ignore_patterns,
+        base_root=find_project_root(start),
+    )
+
     if not findings:
-        click.echo("No issues found. Good job!")
+        click.echo("No issues found.")
         return
+
     if output == "json":
         click.echo(dump_json(findings, lang=lang))
     else:
