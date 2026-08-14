@@ -35,7 +35,11 @@ def find_project_root(start: Path) -> Path:
 
 def load_pyproject(root: Path) -> dict:
     """Load [tool.codeaudit] from pyproject.toml. Never raises."""
-    import tomllib
+    # Python 3.10 uses tomli; 3.11+ has tomllib built in
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover - py3.10 compat
+        import tomli as tomllib  # type: ignore
 
     pyproject = root / "pyproject.toml"
     if not pyproject.exists():
