@@ -3,7 +3,7 @@
 import ast
 import time
 
-from codeaudit.rules.base import ScanContext, Severity, active_rules
+from codeaudit.rules.base import Finding, ScanContext, Severity, active_rules
 
 
 def _collect_python_files(paths, ignore_patterns=(), base_root=None):
@@ -78,7 +78,6 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
 
         from codeaudit.graph import CodeGraph
         from codeaudit.llm.client import filter_verified, verify_findings
-        from codeaudit.rules.base import Finding, Severity
         snippets = {f.line: f.snippet or "" for f in all_findings}
         # Build code graph for evidence-chain context
         try:
@@ -90,7 +89,7 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
                 chains = graph.find_evidence_chain(f.rule_id, max_depth=3)
                 if chains:
                     evidence_chains[key] = chains
-        except Exception:
+        except Exception:  # noqa: BLE001 - graph failure is non-fatal
             evidence_chains = {}
         # AI verify with evidence chains
         verified = verify_findings(all_findings, snippets, evidence_chains)

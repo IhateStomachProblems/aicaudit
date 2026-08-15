@@ -127,7 +127,7 @@ def _call_openai_compat(prompt, cfg):
         with urllib.request.urlopen(req, timeout=60) as resp:
             result = json.load(resp)
             return result["choices"][0]["message"]["content"]
-    except Exception:
+    except Exception:  # noqa: BLE001
         return json.dumps({"error": "openai call failed"})
 
 
@@ -140,7 +140,7 @@ def _call_claude(prompt, cfg):
             system="Respond with valid JSON only. No other text.",
             messages=[{"role": "user", "content": prompt}])
         return msg.content[0].text
-    except Exception:
+    except Exception:  # noqa: BLE001
         return json.dumps({"error": "claude call failed"})
 
 
