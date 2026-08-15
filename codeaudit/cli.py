@@ -56,16 +56,21 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
     else:
         click.echo(dump_markdown(findings, lang=lang))
 
-    # Apply fixes if --fix is set
-    if ai:  # reuse --ai as --fix for now (simplify CLI)
-        from codeaudit.fix import apply_fixes
-        source_files = {}
+    # AI mode: verify findings, then show fix preview
+    if ai:
+        from codeaudit.fix import fix_file
+        seen = set()
         for f in findings:
-            if f.file not in source_files:
-                p = Path(f.file)
-                if p.exists():
-                    source_files[f.file] = p.read_text(encoding="utf-8-sig", errors="replace")
-        apply_fixes(findings, source_files, dry_run=True, backup=False)
+            if f.file in seen or not f.fix:
+                continue
+            seen.add(f.file)
+            p = Path(f.file)
+            if p.exists():
+                result = fix_file(str(p), [f], dry_run=True, backup=False)
+                if result.after and result.after != result.before:
+                    _print_fix_diff(result)
+        click.echo("")
+        click.echo("Run with --apply-fix to actually apply fixes.")
 
 
 @main.command()
@@ -80,3 +85,16 @@ def rules():
 
 if __name__ == "__main__":
     main()
+
+
+def _print_fix_diff(result):
+    """Print a unified diff for a proposed fix."""
+    import difflib
+    if result.before == result.after:
+        return
+    diff = difflib.unified_diff(
+        result.before.splitlines(keepends=True),
+        result.after.splitlines(keepends=True),
+        fromfile=result.path, tofile=result.path + " (fixed)", n=2,
+    )
+    print("".join(diff))

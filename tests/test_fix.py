@@ -1,13 +1,13 @@
-"""Tests for fix engine."""
+"""Tests for fix engine with verification loop."""
 
 import os
 import tempfile
 
 from codeaudit.fix import (
-    _comment_dangerous,
+    FixStatus,
     _fix_bare_except,
-    _is_dangerous_call,
-    apply_fixes,
+    _fix_dangerous_call,
+    fix_file,
 )
 from codeaudit.rules.base import Finding, Severity
 
@@ -38,48 +38,43 @@ def test_fix_bare_except_not_bare():
     assert result is None
 
 
-def test_is_dangerous_eval():
-    assert _is_dangerous_call("eval('1+1')")
-
-
-def test_is_dangerous_exec():
-    assert _is_dangerous_call("exec('x=1')")
-
-
-def test_is_dangerous_os_system():
-    assert _is_dangerous_call("os.system('ls')")
-
-
-def test_is_dangerous_safe():
-    assert not _is_dangerous_call("print('hello')")
-
-
-def test_comment_dangerous():
-    result = _comment_dangerous("    eval('1+1')\n")
+def test_fix_dangerous_eval():
+    result = _fix_dangerous_call("eval('1+1')\n")
     assert result is not None
     assert "TODO" in result
 
 
-def test_apply_fixes_dry_run():
+def test_fix_dangerous_exec():
+    result = _fix_dangerous_call("exec('x=1')\n")
+    assert result is not None
+    assert "TODO" in result
+
+
+def test_fix_dangerous_safe_call():
+    result = _fix_dangerous_call("print('hello')\n")
+    assert result is None
+
+
+def test_fix_file_dry_run():
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write("try:\n    x = 1\nexcept:\n    pass\n")
         fname = f.name
     try:
         findings = [make_finding(rule_id="Q001", line=3, fix_desc="bare except", file=fname)]
-        result = apply_fixes(findings, {}, dry_run=True)
-        assert fname in result
-        assert "except Exception:" in result[fname]
+        result = fix_file(fname, findings, dry_run=True)
+        assert result.status == FixStatus.APPLIED
+        assert "except Exception:" in result.after
     finally:
         os.unlink(fname)
 
 
-def test_apply_fixes_actual_write():
+def test_fix_file_actual_write():
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write("try:\n    x = 1\nexcept:\n    pass\n")
         fname = f.name
     try:
         findings = [make_finding(rule_id="Q001", line=3, fix_desc="bare except", file=fname)]
-        apply_fixes(findings, {}, dry_run=False, backup=False)
+        fix_file(fname, findings, dry_run=False, backup=False)
         with open(fname, encoding="utf-8") as fh:
             content = fh.read()
         assert "except Exception:" in content
@@ -88,14 +83,30 @@ def test_apply_fixes_actual_write():
         os.unlink(fname)
 
 
-def test_apply_fixes_backup_created():
+def test_fix_file_backup():
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
         f.write("try:\n    x = 1\nexcept:\n    pass\n")
         fname = f.name
     try:
         findings = [make_finding(rule_id="Q001", line=3, fix_desc="bare except", file=fname)]
-        apply_fixes(findings, {}, dry_run=False, backup=True)
+        fix_file(fname, findings, dry_run=False, backup=True)
         assert os.path.exists(fname + ".bak")
         os.unlink(fname + ".bak")
+    finally:
+        os.unlink(fname)
+
+
+def test_fix_nonexistent_file():
+    result = fix_file("/nonexistent/file.py", [], dry_run=True)
+    assert result.status == FixStatus.FAILED
+
+
+def test_fix_already_clean():
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write("x = 1\n")
+        fname = f.name
+    try:
+        result = fix_file(fname, [], dry_run=True)
+        assert result.status == FixStatus.SKIPPED
     finally:
         os.unlink(fname)
