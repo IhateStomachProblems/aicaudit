@@ -26,6 +26,14 @@ def load_ai_config() -> AiConfig:
     cfg.provider = os.environ.get("CODEAUDIT_AI_PROVIDER", "mock").lower()
     cfg.api_key = os.environ.get("CODEAUDIT_AI_KEY", "")
     cfg.api_base = os.environ.get("CODEAUDIT_AI_BASE", "")
+
+    # Relay/proxy: any custom API base that is OpenAI-compatible
+    if cfg.provider in ("relay", "custom", "proxy"):
+        cfg.model = os.environ.get("CODEAUDIT_AI_MODEL", "gpt-4o-mini")
+        if not cfg.api_base:
+            print("  Warning: CODEAUDIT_AI_BASE not set for relay provider")
+        return cfg
+
     if cfg.provider == "openai":
         cfg.model = os.environ.get("CODEAUDIT_AI_MODEL", "gpt-4o-mini")
         cfg.api_base = cfg.api_base or "https://api.openai.com/v1"

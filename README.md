@@ -131,4 +131,45 @@ codeaudit scan ./src --output json  # JSON 输出
 
 60 个单元测试，99% 代码覆盖率，13 个变异测试验证，CLI/JSON/中文输出集成测试。
 
-</div>
+
+## AI Configuration
+
+CodeAudit supports multiple LLM providers for AI-powered verification.
+
+### Direct API
+
+```bash
+# OpenAI
+export CODEAUDIT_AI_PROVIDER=openai
+export CODEAUDIT_AI_KEY=sk-xxx
+codeaudit scan ./src --ai
+
+# Claude
+export CODEAUDIT_AI_PROVIDER=claude
+export ANTHROPIC_API_KEY=sk-ant-xxx
+codeaudit scan ./src --ai
+```
+
+### Relay / Proxy Service (中转接口)
+
+Any OpenAI-compatible relay service works. Set the provider to `relay` and point to your relay endpoint:
+
+```bash
+# Example: API2D, OhMyGPT, NewAPI, OneAPI, etc.
+export CODEAUDIT_AI_PROVIDER=relay
+export CODEAUDIT_AI_BASE=https://your-relay.com/v1
+export CODEAUDIT_AI_KEY=sk-your-key
+export CODEAUDIT_AI_MODEL=gpt-4o-mini
+codeaudit scan ./src --ai
+```
+
+Also accepts `custom` or `proxy` as provider names for the same behavior.
+
+### Local Models
+
+```bash
+export CODEAUDIT_AI_PROVIDER=ollama
+codeaudit scan ./src --ai
+```
+
+<div align="center"></div>
