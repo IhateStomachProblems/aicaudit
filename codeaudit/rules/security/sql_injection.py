@@ -1,4 +1,4 @@
-import ast
+﻿import ast
 
 from codeaudit.rules.base import Finding, Rule, Severity, register
 
@@ -6,27 +6,25 @@ DANGEROUS_METHODS = {"execute", "executemany", "executescript"}
 SQL_KEYWORDS = {"select", "insert", "update", "delete", "create", "drop", "alter"}
 
 
-def _join_text(node):
-    """Extract readable text from a string node, including f-strings."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
+def _is_dynamic_string(node):
+    """True if the node is a dynamically constructed string (f-string or concatenation)."""
     if isinstance(node, ast.JoinedStr):
-        parts = []
-        for value in node.values:
-            if isinstance(value, ast.Constant):
-                parts.append(str(value.value))
-            elif isinstance(value, ast.FormattedValue):
-                parts.append("{...}")
-        return "".join(parts)
-    return None
+        for v in node.values:
+            if isinstance(v, ast.FormattedValue):
+                return True
+        return False
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return True
+    return False
 
 
-def _contains_sql(text):
-    lower = text.lower().strip()
-    return any(lower.startswith(kw) for kw in SQL_KEYWORDS)
+def _is_variable(node):
+    """True if the node is a variable reference (not a literal)."""
+    return isinstance(node, (ast.Name, ast.Attribute))
 
 
 def _is_parametrized(call):
+    """True if the SQL call uses parameterized args."""
     if len(call.args) < 2:
         return False
     second = call.args[1]
@@ -54,24 +52,22 @@ class SqlInjection(Rule):
                 continue
 
             sql_arg = node.args[0]
-            text = _join_text(sql_arg)
 
-            # A variable passed to execute - flag unless parameterized
-            if text is None:
+            # Case 1: f-string or concatenation → always injection risk (dynamic content)
+            if _is_dynamic_string(sql_arg):
+                findings.append(self._make(sql_arg, context))
+                continue
+
+            # Case 2: variable passed to execute → flag unless parameterized
+            if _is_variable(sql_arg):
                 if not _is_parametrized(node):
                     findings.append(self._make(sql_arg, context))
                 continue
 
-            if not _contains_sql(text):
+            # Case 3: plain string literal → safe (no external input)
+            # conn.execute("SELECT 1") or conn.execute("SELECT * FROM t", params) are fine
+            if isinstance(sql_arg, ast.Constant) and isinstance(sql_arg.value, str):
                 continue
-
-            # Parameterized queries are safe
-            if _is_parametrized(node):
-                continue
-
-            # Non-parameterized SQL: f-strings, concatenation, or plain literal
-            # are all injection risks when built without parameters
-            findings.append(self._make(sql_arg, context))
 
         return findings
 

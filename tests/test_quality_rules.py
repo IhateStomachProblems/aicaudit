@@ -71,3 +71,53 @@ def test_magic_number_common_safe():
     tree, ctx = make_context(code)
     findings = MagicNumbers().check(tree, ctx)
     assert len(findings) == 0
+# ---------- Regression: Q002 false positive fixes ----------
+
+def test_q002_http_status_allowed():
+    code = "not_found = 404"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_q002_port_allowed():
+    code = "port = 443"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_q002_db_port_allowed():
+    code = "db_port = 3306"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_q002_http_403_safe():
+    code = "status = 403"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_q002_time_constant_allowed():
+    code = "timeout = 3600"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_q002_obscure_number_flagged():
+    code = "weird = 1729"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) >= 1
+
+
+def test_q002_timeout_150_flagged():
+    """150 is not in the whitelist - should still be flagged."""
+    code = "timeout = 150"
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) >= 1

@@ -57,4 +57,75 @@ def test_dangerous_safe_call():
     tree, ctx = make_context(code)
     findings = DangerousFunctions().check(tree, ctx)
     assert len(findings) == 0
+# ---------- Regression: false positive fixes ----------
 
+def test_s003_subprocess_shell_false_safe():
+    """subprocess.run without shell=True should NOT be flagged."""
+    code = "subprocess.run([\"ls\", \"-la\"])"
+    from codeaudit.rules.security.dangerous_functions import DangerousFunctions
+    tree, ctx = make_context(code)
+    findings = DangerousFunctions().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_s003_subprocess_shell_true_flagged():
+    """subprocess.run with shell=True should still be flagged."""
+    code = "subprocess.run([\"rm\", \"-rf\", \"/\"], shell=True)"
+    from codeaudit.rules.security.dangerous_functions import DangerousFunctions
+    tree, ctx = make_context(code)
+    findings = DangerousFunctions().check(tree, ctx)
+    assert len(findings) == 1
+
+
+def test_s001_plain_sql_literal_safe():
+    """Plain SQL literal without external input should NOT be flagged."""
+    code = 'conn.execute("SELECT 1")'
+    from codeaudit.rules.security.sql_injection import SqlInjection
+    tree, ctx = make_context(code)
+    findings = SqlInjection().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_s001_fstring_sql_flagged():
+    """f-string SQL should still be flagged."""
+    code = 'conn.execute(f"SELECT * FROM users WHERE id = {uid}")'
+    from codeaudit.rules.security.sql_injection import SqlInjection
+    tree, ctx = make_context(code)
+    findings = SqlInjection().check(tree, ctx)
+    assert len(findings) == 1
+
+
+def test_s001_parametrized_safe():
+    """Parameterized queries should not be flagged."""
+    code = 'conn.execute("SELECT * FROM users WHERE id = ?", (uid,))'
+    from codeaudit.rules.security.sql_injection import SqlInjection
+    tree, ctx = make_context(code)
+    findings = SqlInjection().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_s001_variable_not_parametrized_flagged():
+    """Variable passed to execute without parameterization should be flagged."""
+    code = "conn.execute(query)"
+    from codeaudit.rules.security.sql_injection import SqlInjection
+    tree, ctx = make_context(code)
+    findings = SqlInjection().check(tree, ctx)
+    assert len(findings) == 1
+
+
+def test_q002_http_status_allowed():
+    """HTTP status codes like 404, 403 should not be flagged."""
+    code = "not_found = 404"
+    from codeaudit.rules.quality.magic_numbers import MagicNumbers
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
+
+
+def test_q002_port_allowed():
+    """Common ports like 80, 443, 3306 should not be flagged."""
+    code = "port = 443"
+    from codeaudit.rules.quality.magic_numbers import MagicNumbers
+    tree, ctx = make_context(code)
+    findings = MagicNumbers().check(tree, ctx)
+    assert len(findings) == 0
