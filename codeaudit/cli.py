@@ -98,3 +98,51 @@ def _print_fix_diff(result):
         fromfile=result.path, tofile=result.path + " (fixed)", n=2,
     )
     print("".join(diff))
+
+
+@main.command()
+@click.argument("paths", nargs=-1, type=click.Path(exists=True))
+@click.option("--lang", type=click.Choice(["en", "zh"]), default="en")
+@click.option("--no-ai", is_flag=True, help="Disable AI deep-audit")
+@click.option("--output", "-o", type=click.Choice(["json", "markdown"]), default="markdown")
+def audit_cmd(paths, lang, no_ai, output):
+    """AI deep audit: static + graph + AI verdict with evidence chains."""
+    if not paths:
+        paths = ["."]
+    from codeaudit.audit import run_audit
+    report = run_audit(paths, lang=lang, use_ai=not no_ai)
+    import json
+    if output == "json":
+        click.echo(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        click.echo(_format_audit_markdown(report, lang))
+
+
+def _format_audit_markdown(report, lang):
+    lines = ['# CodeAudit Deep Audit', '']
+    scan = report['scan']
+    ai = report['ai']
+    lines.append('**Scan**: {} findings / {} files / {}s'.format(scan['findings'], scan['files'], scan['duration_s']))
+    lines.append('**Evidence chains**: {} paths traced'.format(scan['evidence_chains_traced']))
+    lines.append('**AI**: provider={} confirmed {}/{}'.format(ai['provider'], ai['confirmed'], ai['total']))
+    lines.append('')
+    for issue in report['issues']:
+        lines.append('### {}: {}'.format(issue['rule_id'], issue['message']))
+        mark = '' + issue['file'] + ':' + str(issue['line']) + ''
+        lines.append('- **File**: ' + mark)
+        lines.append('- **Static severity**: ' + issue['static_severity'])
+        if issue.get('entry_point'):
+            lines.append('- **Entry point**: ' + issue['entry_point'])
+        if issue.get('evidence_chain'):
+            ps = ' -> '.join(f'{fp}:{ln}({fn})' for fp, ln, fn in issue['evidence_chain'])
+            lines.append('- **Evidence chain**: ' + ps)
+        ai_issue = issue.get('ai') or {}
+        if ai_issue.get('confirmed') is not None:
+            verdict = 'confirmed' if ai_issue['confirmed'] else 'false positive'
+            lines.append('- **AI verdict**: ' + verdict)
+            if ai_issue.get('reason'):
+                lines.append('- **AI reason**: ' + ai_issue['reason'])
+            if ai_issue.get('suggested_fix'):
+                lines.append('- **Suggested fix**: ' + ai_issue['suggested_fix'])
+        lines.append('')
+    return chr(10).join(lines)

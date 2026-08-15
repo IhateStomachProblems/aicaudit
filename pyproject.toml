@@ -5,16 +5,47 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codeaudit"
 version = "0.1.0"
-description = "AI-powered code audit CLI"
+description = "AI-powered code audit CLI for Python projects. Static analysis + AI verification with evidence chains."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-dependencies = ["click>=8.0",
-    "tomli>=2.0; python_version<'3.11'"]
+authors = [{ name = "IhateStomachProblems" }]
+keywords = ["code-audit", "security", "static-analysis", "code-quality", "ai", "vulnerability-scanning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "click>=8.0",
+    "tomli>=2.0; python_version<'3.11'",
+    "anthropic>=0.40.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/IhateStomachProblems/codeaudit"
+Repository = "https://github.com/IhateStomachProblems/codeaudit"
+Documentation = "https://github.com/IhateStomachProblems/codeaudit"
 
 [project.scripts]
 codeaudit = "codeaudit.cli:main"
 
+[tool.setuptools]
+packages = [
+    "codeaudit",
+    "codeaudit.llm",
+    "codeaudit.rules",
+    "codeaudit.rules.security",
+    "codeaudit.rules.quality",
+    "codeaudit.rules.performance",
+    "codeaudit.output",
+]
+
 [tool.ruff.lint.per-file-ignores]
-# Example files are intentionally bad - they demonstrate what CodeAudit finds
 "examples/*.py" = ["ALL"]
