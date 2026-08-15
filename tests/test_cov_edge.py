@@ -11,7 +11,7 @@ from codeaudit.config import (
     merge_config,
 )
 from codeaudit.fix import FixStatus, _apply_fix_to_line, fix_file
-from codeaudit.llm.client import _parse_response
+from codeaudit.llm.client import _parse_deep_response
 from codeaudit.rules.base import Finding, Severity
 
 
@@ -103,12 +103,12 @@ def test_fix_file_no_fix_field():
 
 # llm/client.py: parse_response edge cases
 
-def test_parse_response_empty_list():
-    result = _parse_response("[]", [])
+def test_parse_deep_response_empty_list():
+    result = _parse_deep_response("[]", [], {})
     assert result == []
 
 
-def test_parse_response_not_list():
-    result = _parse_response("{\"key\": \"value\"}", [make_finding()])
+def test_parse_deep_response_not_list():
+    result = _parse_deep_response("{\"key\": \"value\"}", [make_finding()], {})
     assert result[0]["ai_verified"] == True
     assert "Fallback" in result[0]["ai_reason"]

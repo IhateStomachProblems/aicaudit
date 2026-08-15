@@ -15,7 +15,7 @@ from codeaudit.fix import FixStatus, fix_file
 from codeaudit.llm.client import (
     AiConfig,
     _mock_verify,
-    _parse_response,
+    _parse_deep_response,
     load_ai_config,
     verify_findings,
 )
@@ -150,10 +150,10 @@ def test_mock_verify_empty():
     assert _mock_verify([]) == []
 
 
-def test_parse_response_multiple():
+def test_parse_deep_response_multiple():
     findings = [make_finding(), make_finding(rule_id="S002")]
     response = json.dumps([{"index": 0, "is_real": True, "reason": "ok"}, {"index": 1, "is_real": False, "reason": "fp"}])
-    result = _parse_response(response, findings)
+    result = _parse_deep_response(response, findings, {})
     assert result[0]["ai_verified"] == True
     assert result[1]["ai_verified"] == False
 

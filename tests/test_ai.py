@@ -4,7 +4,7 @@ import json
 
 from codeaudit.llm.client import (
     _mock_verify,
-    _parse_response,
+    _parse_deep_response,
     filter_verified,
     verify_findings,
 )
@@ -44,25 +44,25 @@ def test_filter_verified_keeps_real():
     assert result[0]["rule_id"] == "S001"
 
 
-def test_parse_response_valid_json():
+def test_parse_deep_response_valid_json():
     findings = [make_finding()]
     response = json.dumps([{"index": 0, "is_real": True, "reason": "Looks valid"}])
-    result = _parse_response(response, findings)
+    result = _parse_deep_response(response, findings, {})
     assert result[0]["ai_verified"] == True
     assert result[0]["ai_reason"] == "Looks valid"
 
 
-def test_parse_response_false_positive():
+def test_parse_deep_response_false_positive():
     findings = [make_finding()]
     response = json.dumps([{"index": 0, "is_real": False, "reason": "Safe input"}])
-    result = _parse_response(response, findings)
+    result = _parse_deep_response(response, findings, {})
     assert result[0]["ai_verified"] == False
 
 
-def test_parse_response_fallback_on_bad_json():
+def test_parse_deep_response_fallback_on_bad_json():
     findings = [make_finding()]
     response = "not json at all"
-    result = _parse_response(response, findings)
+    result = _parse_deep_response(response, findings, {})
     assert result[0]["ai_verified"] == True
     assert "Fallback" in result[0]["ai_reason"]
 
