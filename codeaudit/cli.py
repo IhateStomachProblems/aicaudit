@@ -56,6 +56,17 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
     else:
         click.echo(dump_markdown(findings, lang=lang))
 
+    # Apply fixes if --fix is set
+    if ai:  # reuse --ai as --fix for now (simplify CLI)
+        from codeaudit.fix import apply_fixes
+        source_files = {}
+        for f in findings:
+            if f.file not in source_files:
+                p = Path(f.file)
+                if p.exists():
+                    source_files[f.file] = p.read_text(encoding="utf-8-sig", errors="replace")
+        apply_fixes(findings, source_files, dry_run=True, backup=False)
+
 
 @main.command()
 def rules():
