@@ -13,9 +13,7 @@ def _is_dynamic_string(node):
             if isinstance(v, ast.FormattedValue):
                 return True
         return False
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return True
-    return False
+    return isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
 
 
 def _is_variable(node):

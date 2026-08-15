@@ -55,9 +55,9 @@ class MagicNumbers(Rule):
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign) and len(node.targets) == 1:
                 target = node.targets[0]
-                if isinstance(target, ast.Name) and target.id.isupper():
-                    if isinstance(node.value, ast.Constant):
-                        named_consts.add(id(node.value))
+                if (isinstance(target, ast.Name) and target.id.isupper()
+                        and isinstance(node.value, ast.Constant)):
+                    named_consts.add(id(node.value))
 
         SAFE = ALLOWED | COMMON_NUMBERS | HTTP_CODES | COMMON_PORTS | TIME_CONSTANTS
 
