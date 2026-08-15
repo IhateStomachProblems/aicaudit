@@ -148,7 +148,7 @@ def _fix_dangerous_call(line: str) -> str | None:
     stripped = line.strip()
     if any(stripped.startswith(fn) for fn in ("eval(", "exec(")):
         indent = line[: len(line) - len(line.lstrip())]
-        return indent + "# TODO: refactor dangerous call\n" + indent + line.lstrip()
+        return indent + "# TODO: refactor dangerous call - " + stripped + "\n"
     return None
 
 
