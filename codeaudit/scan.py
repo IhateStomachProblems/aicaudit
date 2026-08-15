@@ -74,22 +74,42 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
     _print_summary(all_findings, len(files), elapsed, lang)
 
     if ai_verify and all_findings:
+        from pathlib import Path as _P
+
+        from codeaudit.graph import CodeGraph
         from codeaudit.llm.client import filter_verified, verify_findings
-        from codeaudit.rules.base import Finding
+        from codeaudit.rules.base import Finding, Severity
         snippets = {f.line: f.snippet or "" for f in all_findings}
-        verified = verify_findings(all_findings, snippets)
+        # Build code graph for evidence-chain context
+        try:
+            graph = CodeGraph(base_root or _P("."))
+            graph.build()
+            evidence_chains = {}
+            for f in all_findings:
+                key = f.rule_id + ":" + f.file + ":" + str(f.line)
+                chains = graph.find_evidence_chain(f.rule_id, max_depth=3)
+                if chains:
+                    evidence_chains[key] = chains
+        except Exception:
+            evidence_chains = {}
+        # AI verify with evidence chains
+        verified = verify_findings(all_findings, snippets, evidence_chains)
         real = filter_verified(verified)
+        print(f"  AI verdict: {len(all_findings)} static -> {len(real)} confirmed")
+        if evidence_chains:
+            total_chains = sum(len(v) for v in evidence_chains.values())
+            print(f"  Evidence chains: {total_chains} paths traced")
         # Convert dicts back to Finding objects
-        converted = [
-            Finding(
-                rule_id=v["rule_id"], message=v["message"], message_zh=v.get("message_zh", v["message"]),
+        converted = []
+        for v in real:
+            sev = v.get("ai_severity") or v.get("severity", "warning")
+            converted.append(Finding(
+                rule_id=v["rule_id"], message=v["message"],
+                message_zh=v.get("message_zh", v["message"]),
                 file=v["file"], line=v["line"],
-                severity=Severity(v["severity"]),
-                snippet=v.get("snippet"), fix=v.get("fix"),
-            )
-            for v in real
-        ]
-        print(f"  AI filtered: {len(all_findings)} -> {len(converted)} findings")
+                severity=Severity(sev),
+                snippet=v.get("snippet"), fix=v.get("ai_suggested_fix") or v.get("fix"),
+            ))
         all_findings = converted
 
     return all_findings

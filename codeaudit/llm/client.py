@@ -1,8 +1,5 @@
-﻿"""LLM client: multi-provider AI verification for audit findings.
 
-Supports: mock, openai, claude (environment-configured).
-Provider selected via CODEAUDIT_AI_PROVIDER env var.
-"""
+"""LLM client: multi-provider AI verification with evidence-chain context."""
 
 from __future__ import annotations
 
@@ -18,7 +15,7 @@ class AiConfig:
     api_key: str = ""
     api_base: str = ""
     temperature: float = 0.1
-    max_tokens: int = 2048
+    max_tokens: int = 4096
 
 
 def load_ai_config() -> AiConfig:
@@ -26,14 +23,9 @@ def load_ai_config() -> AiConfig:
     cfg.provider = os.environ.get("CODEAUDIT_AI_PROVIDER", "mock").lower()
     cfg.api_key = os.environ.get("CODEAUDIT_AI_KEY", "")
     cfg.api_base = os.environ.get("CODEAUDIT_AI_BASE", "")
-
-    # Relay/proxy: any custom API base that is OpenAI-compatible
     if cfg.provider in ("relay", "custom", "proxy"):
         cfg.model = os.environ.get("CODEAUDIT_AI_MODEL", "gpt-4o-mini")
-        if not cfg.api_base:
-            print("  Warning: CODEAUDIT_AI_BASE not set for relay provider")
         return cfg
-
     if cfg.provider == "openai":
         cfg.model = os.environ.get("CODEAUDIT_AI_MODEL", "gpt-4o-mini")
         cfg.api_base = cfg.api_base or "https://api.openai.com/v1"
@@ -50,11 +42,11 @@ def load_ai_config() -> AiConfig:
     return cfg
 
 
-def verify_findings(findings, code_snippets, config=None):
+def verify_findings(findings, code_snippets, evidence_chains=None, config=None):
     cfg = config or load_ai_config()
     if cfg.provider == "mock":
         return _mock_verify(findings)
-    return _llm_verify(findings, code_snippets, cfg)
+    return _llm_verify(findings, code_snippets, evidence_chains, cfg)
 
 
 def _mock_verify(findings):
@@ -65,32 +57,51 @@ def _mark_verified(f, reason="Mock AI: pass-through (no LLM configured)"):
     d = _finding_to_dict(f)
     d["ai_verified"] = True
     d["ai_reason"] = reason
+    d["ai_severity"] = d["severity"]
+    d["ai_vuln_type"] = ""
+    d["ai_suggested_fix"] = d.get("fix", "")
+    d["evidence_used"] = []
     return d
 
 
 def _finding_to_dict(f):
-    return {"rule_id": f.rule_id, "message": f.message, "file": f.file, "line": f.line,
-            "severity": f.severity.value, "snippet": f.snippet, "fix": f.fix}
+    return {"rule_id": f.rule_id, "message": f.message, "file": f.file,
+            "line": f.line, "severity": f.severity.value,
+            "snippet": f.snippet, "fix": f.fix}
 
 
-def _llm_verify(findings, code_snippets, cfg):
+def _llm_verify(findings, code_snippets, evidence_chains, cfg):
     if not cfg.api_key and cfg.provider not in ("ollama",):
         return _mock_verify(findings)
-    prompt = _build_prompt(findings, code_snippets)
+    prompt = _build_deep_prompt(findings, code_snippets, evidence_chains)
     response = _call_llm(prompt, cfg)
-    return _parse_response(response, findings)
+    return _parse_deep_response(response, findings, evidence_chains)
 
 
-def _build_prompt(findings, code_snippets):
+def _build_deep_prompt(findings, code_snippets, evidence_chains):
     parts = [
-        "You are a code review expert. Verify each potential issue.\n",
-        "Respond with JSON array: [{\"index\": 0, \"is_real\": true, \"reason\": \"...\"}]\n",
-        "ONLY return valid JSON, no other text.\n\n",
+        "You are a senior security code reviewer. For each finding, determine:\n",
+        "- is_real: true/false (is this a genuine vulnerability?)\n",
+        "- severity: info/warning/error/critical (re-assess!)\n",
+        "- vuln_type: e.g. SQL-injection, XSS, command-injection, secret-leak\n",
+        "- suggested_fix: concise concrete fix advice (2-3 sentences max)\n",
+        "- reason: why you decided this (1-2 sentences)\n",
+        "\nRespond ONLY as JSON array:\n",
     ]
     for i, f in enumerate(findings):
-        parts.append(f"[{i}] {f.rule_id} {f.severity.value}\n")
-        parts.append(f"    {f.message}\n")
-        parts.append(f"    Code: {code_snippets.get(f.line, )}\n\n")
+        parts.append("=== Finding [" + str(i) + "] ===\n")
+        parts.append("Rule: " + f.rule_id + " | Static severity: " + f.severity.value + "\n")
+        parts.append("Message: " + f.message + "\n")
+        parts.append("File: " + f.file + ":" + str(f.line) + "\n")
+        parts.append("Code: " + str(code_snippets.get(f.line, "")) + "\n")
+        key = f.rule_id + ":" + f.file + ":" + str(f.line)
+        chains = (evidence_chains or {}).get(key, [])
+        if chains:
+            parts.append("Evidence chain (" + str(len(chains)) + " paths):\n")
+            for c in chains[:2]:
+                entries = " -> ".join(str(fp) + ":" + str(ln) + "(" + str(fn) + ")" for fp, ln, fn in c.path)
+                parts.append("  Entry: " + c.entry + " | Path: " + entries + " | Sink: " + c.sink + " | Risk: " + c.risk + "\n")
+        parts.append("\n")
     return "".join(parts)
 
 
@@ -101,7 +112,6 @@ def _call_llm(prompt, cfg):
 
 
 def _call_openai_compat(prompt, cfg):
-    """Call OpenAI-compatible API (OpenAI, Ollama, OpenRouter)."""
     import urllib.request
     body = json.dumps({"model": cfg.model, "messages": [
         {"role": "system", "content": "Respond with valid JSON only."},
@@ -117,40 +127,43 @@ def _call_openai_compat(prompt, cfg):
         with urllib.request.urlopen(req, timeout=60) as resp:
             result = json.load(resp)
             return result["choices"][0]["message"]["content"]
-    except Exception as e:  # noqa: BLE001
-        return json.dumps({"error": str(e)})
+    except Exception:
+        return json.dumps({"error": "openai call failed"})
 
 
 def _call_claude(prompt, cfg):
-    """Call Claude via Anthropic SDK (Messages API)."""
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=cfg.api_key or os.environ.get("ANTHROPIC_API_KEY", ""))
         msg = client.messages.create(
-            model=cfg.model,
-            max_tokens=cfg.max_tokens,
-            temperature=cfg.temperature,
+            model=cfg.model, max_tokens=cfg.max_tokens, temperature=cfg.temperature,
             system="Respond with valid JSON only. No other text.",
             messages=[{"role": "user", "content": prompt}])
         return msg.content[0].text
-    except Exception as e:  # noqa: BLE001
-        return json.dumps({"error": str(e)})
+    except Exception:
+        return json.dumps({"error": "claude call failed"})
 
 
-def _parse_response(response_text, findings):
+def _parse_deep_response(response_text, findings, evidence_chains):
     results = []
     try:
         verdicts = json.loads(response_text)
         if isinstance(verdicts, list):
-            vmap = {v.get("index"): v for v in verdicts if "index" in v}
+            vmap = {v["index"]: v for v in verdicts if isinstance(v, dict) and "index" in v}
             for i, f in enumerate(findings):
-                d = _finding_to_dict(f)
                 if i in vmap:
-                    d["ai_verified"] = vmap[i].get("is_real", True)
-                    d["ai_reason"] = vmap[i].get("reason", "")
+                    v = vmap[i]
+                    d = _finding_to_dict(f)
+                    d["ai_verified"] = v.get("is_real", True)
+                    d["ai_reason"] = v.get("reason", "")
+                    d["ai_severity"] = v.get("severity", d["severity"])
+                    d["ai_vuln_type"] = v.get("vuln_type", "")
+                    d["ai_suggested_fix"] = v.get("suggested_fix", "")
+                    key = f.rule_id + ":" + f.file + ":" + str(f.line)
+                    d["evidence_used"] = (evidence_chains or {}).get(key, [])
+                    results.append(d)
                 else:
-                    d.update(ai_verified=True, ai_reason="No verdict")
-                results.append(d)
+                    results.append(_mark_verified(f, "No verdict from AI"))
             return results
     except (json.JSONDecodeError, TypeError):
         pass
