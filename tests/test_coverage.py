@@ -1,4 +1,4 @@
-"""Coverage: __main__, config edge cases, fix failure paths, LLM providers."""
+﻿"""Coverage: __main__, config edge cases, fix failure paths, LLM providers."""
 
 import json
 import os
@@ -30,7 +30,7 @@ def make_finding(rule_id="S001", line=1, msg="test", snippet="x=1", file="test.p
 
 def test_main_module_entry():
     """python -m codeaudit --help should work."""
-    r = subprocess.run([sys.executable, "-m", "codeaudit", "--help"], capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(__file__)), encoding="utf-8", errors="replace")
+    r = subprocess.run([sys.executable, "-m", "codeaudit", "--help"], capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(__file__)), encoding="utf-8", errors="replace", check=False)
     assert r.returncode == 0
     assert "CodeAudit" in r.stdout
 
@@ -75,7 +75,7 @@ def test_cli_scan_with_config():
 # ---------- fix failure paths ----------
 
 def test_fix_syntax_error_original():
-    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
+    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")  # noqa: SIM115
     f.write("def broken(:\n")
     fname = f.name
     f.close()
@@ -92,10 +92,9 @@ def test_fix_nonexistent_file():
 
 
 def test_fix_skipped_no_fix_needed():
-    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
-    f.write("x = 1\n")
-    fname = f.name
-    f.close()
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write("x = 1\n")
+        fname = f.name
     try:
         result = fix_file(fname, [], dry_run=True)
         assert result.status == FixStatus.SKIPPED
@@ -105,10 +104,9 @@ def test_fix_skipped_no_fix_needed():
 
 def test_fix_dangerous_call_syntax_error_after():
     """If fix introduces syntax error, it should fail."""
-    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
-    f.write("exec('x=1')\n")
-    fname = f.name
-    f.close()
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write("exec('x=1')\n")
+        fname = f.name
     try:
         findings = [Finding(rule_id="S003", message="test", message_zh="test", file=fname, line=1, severity=Severity.ERROR, fix="dangerous")]
         result = fix_file(fname, findings, dry_run=True)

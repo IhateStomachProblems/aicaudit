@@ -1,4 +1,4 @@
-"""Coverage: fix engine defensive branches."""
+﻿"""Coverage: fix engine defensive branches."""
 
 import os
 import tempfile
@@ -25,7 +25,7 @@ def test_fixresult_repr():
 
 
 def test_fix_origin_syntax_error():
-    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
+    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")  # noqa: SIM115
     f.write("def broken(:\n")
     fname = f.name
     f.close()
@@ -51,10 +51,9 @@ def test_fix_undefined_name_direct():
 
 def test_fix_verify_regression_trips():
     # Force verification to fail: rule still present after fix
-    f = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
-    f.write("try:\n    x = 1\nexcept:  # keep\n    pass\n")
-    fname = f.name
-    f.close()
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as f:
+        f.write("try:\n    x = 1\nexcept:  # keep\n    pass\n")
+        fname = f.name
     try:
         # A finding that won't be fully fixed should still verify safely
         findings = [make_finding(rule_id="Q001", line=3, file=fname)]
