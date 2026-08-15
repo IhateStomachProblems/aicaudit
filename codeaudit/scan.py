@@ -44,31 +44,9 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
     all_findings = []
 
     for file_path in files:
-        try:
-            source = file_path.read_text(encoding="utf-8-sig", errors="replace")
-        except OSError:
-            continue
-
-        try:
-            tree = ast.parse(source, filename=str(file_path))
-        except SyntaxError:
-            continue
-
-        lines = source.splitlines(keepends=False)
-        ctx = ScanContext(file_path=file_path, source=source, lines=lines, lang=lang)
-
-        for rule_cls in sel_rules:
-            try:
-                rule = rule_cls()
-                findings = rule.check(tree, ctx)
-                for f in findings:
-                    if min_severity and _severity_rank(f.severity) < _severity_rank(
-                        Severity(min_severity)
-                    ):
-                        continue
-                    all_findings.append(f)
-            except Exception as exc:  # noqa: BLE001 - isolate rule failures
-                print(f"  Rule {rule_cls.id} failed: {exc}")
+        all_findings.extend(
+            _scan_single_file(file_path, sel_rules, min_severity, lang)
+        )
 
     elapsed = time.time() - start
     _print_summary(all_findings, len(files), elapsed, lang)
@@ -128,8 +106,12 @@ def _import_all_rules():
     import codeaudit.rules.quality.undefined_name
     import codeaudit.rules.quality.unused_variable
     import codeaudit.rules.security.dangerous_functions
+    import codeaudit.rules.security.path_traversal
     import codeaudit.rules.security.secret_leak
-    import codeaudit.rules.security.sql_injection  # noqa: F401
+    import codeaudit.rules.security.sql_injection
+    import codeaudit.rules.security.ssrf
+    import codeaudit.rules.security.weak_crypto
+    import codeaudit.rules.security.xml_xxe  # noqa: F401
 
 
 def _print_summary(findings, file_count, elapsed, lang):
@@ -149,3 +131,30 @@ def _print_summary(findings, file_count, elapsed, lang):
     for sev in ("critical", "error", "warning", "info"):
         if sev in counts:
             print(f"  [{labels[sev].upper()}] {counts[sev]}")
+
+
+def _scan_single_file(file_path, sel_rules, min_severity, lang):
+    """Scan one file with all rules, applying severity filter."""
+    try:
+        source = file_path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return []
+    try:
+        tree = ast.parse(source, filename=str(file_path))
+    except SyntaxError:
+        return []
+
+    lines = source.splitlines(keepends=False)
+    ctx = ScanContext(file_path=file_path, source=source, lines=lines, lang=lang)
+    findings = []
+    for rule_cls in sel_rules:
+        try:
+            rule = rule_cls()
+            f_results = rule.check(tree, ctx)
+            for f in f_results:
+                if min_severity and _severity_rank(f.severity) < _severity_rank(Severity(min_severity)):
+                    continue
+                findings.append(f)
+        except Exception as exc:  # noqa: BLE001 - isolate rule failures
+            print(f"  Rule {rule_cls.id} failed: {exc}")
+    return findings

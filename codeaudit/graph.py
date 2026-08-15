@@ -68,40 +68,43 @@ class CodeGraph:
     def _scan_file(self, file_path: Path, tree: ast.AST, source: str):
         rel = str(file_path.relative_to(self.root))
         lines = source.splitlines(keepends=False)
-
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                calls = set()
-                for sub in ast.walk(node):
-                    if isinstance(sub, ast.Call):
-                        name = self._call_name(sub)
-                        if name:
-                            calls.add(name)
-                fd = FuncDef(name=node.name, file=rel, line=node.lineno or 0,
-                           docstring=ast.get_docstring(node) or "", calls=calls)
-                self.funcs[node.name].append(fd)
+            self._scan_funcdef(node, rel)
+            self._scan_entrypoint(node, rel)
+            self._scan_sink(node, rel, lines)
 
-            if isinstance(node, ast.Call):
-                name = self._call_name(node)
-                if name and "route" in name:
-                    for kw in node.keywords:
-                        if kw.arg == "rule" and isinstance(kw.value, ast.Constant):
-                            self.entry_points.append(EntryPoint(
-                                kind="route", location=f"{rel}:{node.lineno}",
-                                pattern=str(kw.value.value)))
+    def _scan_funcdef(self, node, rel):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return
+        calls = {self._call_name(sub) for sub in ast.walk(node)
+                 if isinstance(sub, ast.Call) and self._call_name(sub)}
+        self.funcs[node.name].append(FuncDef(
+            name=node.name, file=rel, line=node.lineno or 0,
+            docstring=ast.get_docstring(node) or "", calls=calls))
 
-            if isinstance(node, ast.If) and self._is_main_check(node):
-                self.entry_points.append(EntryPoint(
-                    kind="main", location=f"{rel}:{node.lineno}"))
+    def _scan_entrypoint(self, node, rel):
+        if isinstance(node, ast.Call):
+            name = self._call_name(node)
+            if name and "route" in name:
+                for kw in node.keywords:
+                    if kw.arg == "rule" and isinstance(kw.value, ast.Constant):
+                        self.entry_points.append(EntryPoint(
+                            kind="route", location=f"{rel}:{node.lineno}",
+                            pattern=str(kw.value.value)))
+        if isinstance(node, ast.If) and self._is_main_check(node):
+            self.entry_points.append(EntryPoint(
+                kind="main", location=f"{rel}:{node.lineno}"))
 
-            if isinstance(node, ast.Call):
-                name = self._call_name(node)
-                if name and name in ("eval", "exec", "os.system", "subprocess.run",
-                                    "subprocess.Popen", "pickle.loads", "yaml.load",
-                                    "conn.execute", "cursor.execute"):
-                    self.sinks.append(Sink(
-                        func=name, file=rel, line=node.lineno or 0,
-                        code=lines[node.lineno - 1].strip() if node.lineno else ""))
+    def _scan_sink(self, node, rel, lines):
+        if not isinstance(node, ast.Call):
+            return
+        name = self._call_name(node)
+        if name and name in ("eval", "exec", "os.system", "subprocess.run",
+                            "subprocess.Popen", "pickle.loads", "yaml.load",
+                            "conn.execute", "cursor.execute"):
+            self.sinks.append(Sink(
+                func=name, file=rel, line=node.lineno or 0,
+                code=lines[node.lineno - 1].strip() if node.lineno else ""))
 
     @staticmethod
     def _call_name(node: ast.Call) -> str:
