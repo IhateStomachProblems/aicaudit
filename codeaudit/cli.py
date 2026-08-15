@@ -44,6 +44,7 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
         min_severity=cfg.min_severity,
         ignore_patterns=cfg.ignore_patterns,
         base_root=find_project_root(start),
+        ai_verify=ai,
     )
 
     if not findings:

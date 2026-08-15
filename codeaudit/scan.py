@@ -26,7 +26,7 @@ def _is_ignored(path, patterns, base_root):
     return matches_ignore(path, patterns, base_root)
 
 
-def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, base_root=None):
+def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, base_root=None, ai_verify=False):
     """Scan Python files. Returns findings filtered by rules and severity."""
     _import_all_rules()
 
@@ -72,6 +72,26 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
 
     elapsed = time.time() - start
     _print_summary(all_findings, len(files), elapsed, lang)
+
+    if ai_verify and all_findings:
+        from codeaudit.llm.client import filter_verified, verify_findings
+        from codeaudit.rules.base import Finding
+        snippets = {f.line: f.snippet or "" for f in all_findings}
+        verified = verify_findings(all_findings, snippets)
+        real = filter_verified(verified)
+        # Convert dicts back to Finding objects
+        converted = [
+            Finding(
+                rule_id=v["rule_id"], message=v["message"], message_zh=v.get("message_zh", v["message"]),
+                file=v["file"], line=v["line"],
+                severity=Severity(v["severity"]),
+                snippet=v.get("snippet"), fix=v.get("fix"),
+            )
+            for v in real
+        ]
+        print(f"  AI filtered: {len(all_findings)} -> {len(converted)} findings")
+        all_findings = converted
+
     return all_findings
 
 
