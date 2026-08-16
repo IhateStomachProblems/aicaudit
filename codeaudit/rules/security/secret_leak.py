@@ -9,7 +9,7 @@ SENSITIVE_NAMES = re.compile(
     r"(api[_-]?key|secret|token|password|passwd|pwd|auth|credential|"
     r"private[_-]?key|certificate|pem|cert|key|access[_-]?key|"
     r"secret[_-]?key|app[_-]?secret|consumer[_-]?secret|"
-    r"db[_-]?url|database[_-]?url|jdbc|connection[_-]?string|"
+    r"db_url|db[_-]?url|database[_-]?url|jdbc|connection[_-]?string|redis_url|"
     r"client[_-]?secret|bearer)", re.IGNORECASE
 )
 
@@ -24,7 +24,7 @@ KEY_PATTERNS = re.compile(
     r"sk_live_[a-zA-Z0-9]{20,}|"
     r"rk_live_[a-zA-Z0-9]{20,}|"
     r"eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}|"
-    r"mongodb(?:\+srv)?://[a-zA-Z0-9]+:[^@]+@|"
+    r"mongodb(?::\+srv)?://[a-zA-Z0-9]+:[^@]+@|"
     r"postgresql://[a-zA-Z0-9]+:[^@]+@|"
     r"mysql://[a-zA-Z0-9]+:[^@]+@|"
     r"redis://(:[^@]*@|[a-zA-Z0-9]+:[^@]+@)|"
