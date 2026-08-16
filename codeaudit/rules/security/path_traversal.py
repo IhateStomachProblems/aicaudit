@@ -43,7 +43,7 @@ class PathTraversal(Rule):
                 continue
 
             # Pattern 3: archive extraction (zip/tar slip) - match .extract/.extractall suffix
-            if (func.endswith("extract") or func.endswith("extractall")) and node.args:
+            if (func.endswith(("extract", "extractall"))) and node.args:
                 for arg in node.args:
                     if _is_user_supplied(arg):
                         findings.append(self._make_join(node, func, context))
