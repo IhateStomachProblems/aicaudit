@@ -17,9 +17,7 @@ def _is_unsafe_xml(func):
         return True
     if "xml.dom" in lower and "parse" in lower:
         return True
-    if func in ("ET.parse", "etree.parse", "ET.fromstring"):
-        return True
-    return False
+    return func in ("ET.parse", "etree.parse", "ET.fromstring")
 
 
 @register
