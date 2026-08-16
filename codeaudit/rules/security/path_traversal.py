@@ -4,12 +4,11 @@ import ast
 from codeaudit.rules.base import Finding, Rule, Severity, register
 
 FILE_OPENERS = {"open", "codecs.open"}
-SUSPICIOUS_JOIN = {"os.path.join", "os.path.abspath", "os.path.realpath"}
-
+SUSPICIOUS_JOIN = {"os.path.join", "os.path.abspath", "os.path.realpath", "os.path.normpath"}
+ARCHIVE_EXTRACT = {"zipfile.extract", "zipfile.extractall", "tarfile.extract", "tarfile.extractall"}
 
 def _is_variable(node):
     return isinstance(node, (ast.Name, ast.Attribute))
-
 
 def _is_dynamic_path(node):
     """True if the path expression contains dynamic content (user input)."""
@@ -21,7 +20,6 @@ def _is_dynamic_path(node):
         return True
     # function call: open(get_input()) - clearly user input
     return isinstance(node, (ast.Call, ast.Name, ast.Attribute))
-
 
 @register
 class PathTraversal(Rule):
@@ -43,6 +41,13 @@ class PathTraversal(Rule):
                 if _is_dynamic_path(node.args[0]):
                     findings.append(self._make(node, func, context))
                 continue
+
+            # Pattern 3: archive extraction (zip/tar slip) - match .extract/.extractall suffix
+            if (func.endswith("extract") or func.endswith("extractall")) and node.args:
+                for arg in node.args:
+                    if _is_user_supplied(arg):
+                        findings.append(self._make_join(node, func, context))
+                        break
 
             # Pattern 2: os.path.join(variable, ...) or similar
             if func in SUSPICIOUS_JOIN and node.args:
@@ -67,10 +72,8 @@ class PathTraversal(Rule):
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
                        fix="Whitelist allowed paths before joining with user input")
 
-
 def _is_user_supplied(node):
     return isinstance(node, (ast.Call, ast.Name, ast.Attribute))
-
 
 def _func_name(node):
     if isinstance(node, ast.Name): return node.id
