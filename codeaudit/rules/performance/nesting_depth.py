@@ -10,15 +10,14 @@ NESTING_NODES = (ast.If, ast.For, ast.While, ast.Try, ast.With,
 def _max_depth(func_node):
     best = 0
 
-    def visit(node, depth):
-        nonlocal best
+    stack = [(func_node, 0)]
+    while stack:
+        node, depth = stack.pop()
         if isinstance(node, NESTING_NODES):
             depth += 1
             best = max(best, depth)
         for child in ast.iter_child_nodes(node):
-            visit(child, depth)
-
-    visit(func_node, 0)
+            stack.append((child, depth))
     return best
 
 
