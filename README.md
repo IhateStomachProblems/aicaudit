@@ -6,9 +6,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-182%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-197%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
+  <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/codeaudit?style=social" alt="Stars"/>
 </p>
 
@@ -46,6 +47,7 @@ codeaudit scan ./src --lang zh
 | S005 | SSRF detection | ERROR |
 | S006 | Weak cryptography detection | WARNING |
 | S007 | XML External Entity (XXE) detection | ERROR |
+| S008 | Insecure random (non-crypto PRNG) | WARNING |
 
 ### Quality
 
@@ -66,6 +68,20 @@ codeaudit scan ./src --lang zh
 
 ---
 
+## Inline Suppression
+
+Suppress specific findings with inline comments:
+
+```python
+# Ignore a specific rule on this line
+query = f"SELECT * FROM users WHERE id={user_id}"  # codeaudit: ignore S001
+
+# Ignore all rules on this line
+eval(user_input)  # codeaudit: ignore
+```
+
+---
+
 ## Caveats
 
 CodeAudit is a young project. Here are some honest limitations:
@@ -81,59 +97,19 @@ CodeAudit is a young project. Here are some honest limitations:
 
 | Scenario | Time |
 |----------|------|
-| 100 files directory | ~0.8s |
+| 33 files directory | ~0.12s |
 | Single file | ~0.01s |
-| Empty file | ~0.01s |
 
 ---
 
 ## Testing
 
-- 182 unit tests (pytest)
+- 197 unit tests (pytest)
 - 91% code coverage (pytest-cov)
 - Integration tests for CLI, JSON output, Chinese output
 - Self-scan validation: we audit our own codebase
 
 ---
-
-## License
-
-MIT © IhateStomachProblems
-
----
-
-<div align="center">
-
----
-
-# CodeAudit 中文版
-
-## 快速开始
-
-```bash
-pip install codeaudit
-codeaudit scan ./项目目录    # 扫描项目
-codeaudit scan ./src --lang zh  # 使用中文输出
-codeaudit scan ./src --output json  # JSON 输出
-```
-
-## 规则列表
-
-**安全**：SQL注入检测、硬编码密钥检测、危险函数检测、路径遍历、SSRF、弱加密、XXE
-**质量**：裸except、魔法数字、未定义变量、TODO注释、未使用变量
-**性能**：圈复杂度、嵌套深度
-
-## 注意事项
-
-- 目前仅支持 Python — 更多语言正在规划中
-- 纯静态分析，不是运行时安全工具
-- 没有工具能发现所有问题，请结合人工审查
-- 规则反映常见模式，可能不适用于所有代码库
-
-## 测试
-
-182 个单元测试，91% 代码覆盖率，CLI/JSON/中文输出集成测试。
-
 
 ## AI Configuration
 
@@ -175,4 +151,52 @@ export CODEAUDIT_AI_PROVIDER=ollama
 codeaudit scan ./src --ai
 ```
 
-<div align="center"></div>
+---
+
+## License
+
+MIT © IhateStomachProblems
+
+---
+
+<div align="center">
+
+---
+
+# CodeAudit 中文版
+
+## 快速开始
+
+```bash
+pip install codeaudit
+codeaudit scan ./项目目录    # 扫描项目
+codeaudit scan ./src --lang zh  # 使用中文输出
+codeaudit scan ./src --output json  # JSON 输出
+```
+
+## 规则列表
+
+**安全**：SQL注入检测、硬编码密钥检测、危险函数检测、路径遍历、SSRF、弱加密、XXE、不安全随机数
+**质量**：裸except、魔法数字、未定义变量、TODO注释、未使用变量
+**性能**：圈复杂度、嵌套深度
+
+## 行内抑制
+
+```python
+# 忽略特定规则
+query = f"SELECT * FROM users WHERE id={user_id}"  # codeaudit: ignore S001
+
+# 忽略该行所有规则
+eval(user_input)  # codeaudit: ignore
+```
+
+## 注意事项
+
+- 目前仅支持 Python — 更多语言正在规划中
+- 纯静态分析，不是运行时安全工具
+- 没有工具能发现所有问题，请结合人工审查
+- 规则反映常见模式，可能不适用于所有代码库
+
+## 测试
+
+197 个单元测试，91% 代码覆盖率，CLI/JSON/中文输出集成测试。

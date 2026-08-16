@@ -1,9 +1,13 @@
 """Scan engine: collects files, runs rules, aggregates findings."""
 
 import ast
+import re
 import time
 
 from codeaudit.rules.base import Finding, ScanContext, Severity, active_rules
+
+# Inline suppression: # codeaudit: ignore  OR  # codeaudit: ignore=S001
+_SUPPRESS_RE = re.compile(r"#\s*codeaudit:\s*ignore(?:\s*[= ]\s*(\S+))?", re.IGNORECASE)
 
 
 def _collect_python_files(paths, ignore_patterns=(), base_root=None):
@@ -75,7 +79,32 @@ def _import_all_rules():
     import codeaudit.rules.security.sql_injection
     import codeaudit.rules.security.ssrf
     import codeaudit.rules.security.weak_crypto
-    import codeaudit.rules.security.xml_xxe  # noqa: F401
+    import codeaudit.rules.security.xml_xxe
+    import codeaudit.rules.security.insecure_random  # noqa: F401
+
+
+def _parse_suppressions(lines):
+    """Parse inline suppression comments. Returns dict: line_num -> set of rule IDs or None."""
+    suppress = {}
+    for i, line in enumerate(lines, 1):
+        m = _SUPPRESS_RE.search(line)
+        if m:
+            rule_id = m.group(1)
+            if rule_id:
+                suppress[i] = {rule_id.upper()}
+            else:
+                suppress[i] = None  # None means ignore all
+    return suppress
+
+
+def _is_suppressed(finding, suppress_map):
+    """Check if a finding should be suppressed by inline comments."""
+    for check_line in (finding.line, finding.line - 1):
+        if check_line in suppress_map:
+            allowed = suppress_map[check_line]
+            if allowed is None or finding.rule_id.upper() in allowed:
+                return True
+    return False
 
 
 def _print_summary(findings, file_count, elapsed, lang):
@@ -98,7 +127,7 @@ def _print_summary(findings, file_count, elapsed, lang):
 
 
 def _scan_single_file(file_path, sel_rules, min_severity, lang):
-    """Scan one file with all rules, applying severity filter."""
+    """Scan one file with all rules, applying severity filter and inline suppressions."""
     try:
         source = file_path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
@@ -110,6 +139,7 @@ def _scan_single_file(file_path, sel_rules, min_severity, lang):
 
     lines = source.splitlines(keepends=False)
     ctx = ScanContext(file_path=file_path, source=source, lines=lines, lang=lang)
+    suppress_map = _parse_suppressions(lines)
     findings = []
     for rule_cls in sel_rules:
         try:
@@ -117,6 +147,8 @@ def _scan_single_file(file_path, sel_rules, min_severity, lang):
             f_results = rule.check(tree, ctx)
             for f in f_results:
                 if min_severity and _severity_rank(f.severity) < _severity_rank(Severity(min_severity)):
+                    continue
+                if _is_suppressed(f, suppress_map):
                     continue
                 findings.append(f)
         except Exception as exc:  # noqa: BLE001 - isolate rule failures
