@@ -1,4 +1,4 @@
-﻿# CodeAudit 🛡️
+# CodeAudit 🛡️
 
 > AI-powered code audit CLI for Python — security, quality, and performance analysis.
 >
@@ -6,8 +6,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-60%20passed-brightgreen" alt="Tests"/>
-  <img src="https://img.shields.io/badge/coverage-99%25-brightgreen" alt="Coverage"/>
+  <img src="https://img.shields.io/badge/tests-182%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/codeaudit?style=social" alt="Stars"/>
 </p>
@@ -42,6 +42,10 @@ codeaudit scan ./src --lang zh
 | S001 | SQL injection detection | CRITICAL |
 | S002 | Hardcoded secret detection | CRITICAL |
 | S003 | Dangerous functions (eval, exec, pickle, os.system) | ERROR |
+| S004 | Path traversal detection | ERROR |
+| S005 | SSRF detection | ERROR |
+| S006 | Weak cryptography detection | WARNING |
+| S007 | XML External Entity (XXE) detection | ERROR |
 
 ### Quality
 
@@ -77,19 +81,18 @@ CodeAudit is a young project. Here are some honest limitations:
 
 | Scenario | Time |
 |----------|------|
-| 2000-line file | ~0.4s |
-| 100 files directory | ~0.4s |
+| 100 files directory | ~0.8s |
+| Single file | ~0.01s |
 | Empty file | ~0.01s |
 
 ---
 
 ## Testing
 
-- 60 unit tests (pytest)
-- 99% code coverage (pytest-cov)
-- 13 mutation tests (behavioral validation)
+- 182 unit tests (pytest)
+- 91% code coverage (pytest-cov)
 - Integration tests for CLI, JSON output, Chinese output
-- Dogfooding: we scan our own codebase
+- Self-scan validation: we audit our own codebase
 
 ---
 
@@ -116,7 +119,7 @@ codeaudit scan ./src --output json  # JSON 输出
 
 ## 规则列表
 
-**安全**：SQL注入检测、硬编码密钥检测、危险函数检测（eval/exec/pickle/os.system）
+**安全**：SQL注入检测、硬编码密钥检测、危险函数检测、路径遍历、SSRF、弱加密、XXE
 **质量**：裸except、魔法数字、未定义变量、TODO注释、未使用变量
 **性能**：圈复杂度、嵌套深度
 
@@ -129,7 +132,7 @@ codeaudit scan ./src --output json  # JSON 输出
 
 ## 测试
 
-60 个单元测试，99% 代码覆盖率，13 个变异测试验证，CLI/JSON/中文输出集成测试。
+182 个单元测试，91% 代码覆盖率，CLI/JSON/中文输出集成测试。
 
 
 ## AI Configuration
