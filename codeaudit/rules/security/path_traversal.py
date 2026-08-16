@@ -20,9 +20,7 @@ def _is_dynamic_path(node):
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return True
     # function call: open(get_input()) - clearly user input
-    if isinstance(node, ast.Call):
-        return True
-    return False
+    return isinstance(node, ast.Call)
 
 
 @register
