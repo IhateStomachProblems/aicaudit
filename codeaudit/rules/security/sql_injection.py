@@ -22,9 +22,8 @@ def _is_percent_format(node):
     # BinOp(Mod): left is string with %s/%d, right is the interpolated value
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
         left = node.left
-        if isinstance(left, ast.Constant) and isinstance(left.value, str):
-            if any(p in left.value for p in ("%s", "%d", "%r", "%f", "%(name)s")):
-                return True
+        if isinstance(left, ast.Constant) and isinstance(left.value, str) and any(p in left.value for p in ("%s", "%d", "%r", "%f", "%(name)s")):
+            return True
     return False
 
 
