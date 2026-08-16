@@ -39,7 +39,8 @@ class SSRF(Rule):
                        fix="Validate URL against a whitelist of allowed domains")
 
 
-def _is_user_supplied(node):\n    return isinstance(node, (ast.Call, ast.Name, ast.Attribute))
+def _is_user_supplied(node):
+    return isinstance(node, (ast.Call, ast.Name, ast.Attribute))
 
 
 def _func_name(node):
