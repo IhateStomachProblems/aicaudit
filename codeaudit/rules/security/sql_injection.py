@@ -7,14 +7,35 @@ SQL_KEYWORDS = {"select", "insert", "update", "delete", "create", "drop", "alter
 
 
 def _is_dynamic_string(node):
-    """True if the node is a dynamically constructed string (f-string or concatenation)."""
     if isinstance(node, ast.JoinedStr):
         for v in node.values:
             if isinstance(v, ast.FormattedValue):
                 return True
         return False
-    return isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return True
+    return False
 
+
+def _is_percent_format(node):
+    """Detect %-formatting: "SELECT ... WHERE id = %s" % user_input"""
+    # BinOp(Mod): left is string with %s/%d, right is the interpolated value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+        left = node.left
+        if isinstance(left, ast.Constant) and isinstance(left.value, str):
+            if any(p in left.value for p in ("%s", "%d", "%r", "%f", "%(name)s")):
+                return True
+    return False
+
+
+def _is_format_string(node):
+    """Detect .format() method call on strings."""
+    if isinstance(node, ast.Call):
+        return (isinstance(node.func, ast.Attribute)
+                and node.func.attr == "format"
+                and isinstance(node.func.value, ast.Constant)
+                and isinstance(node.func.value.value, str))
+    return False
 
 def _is_variable(node):
     """True if the node is a variable reference (not a literal)."""
@@ -51,8 +72,8 @@ class SqlInjection(Rule):
 
             sql_arg = node.args[0]
 
-            # Case 1: f-string or concatenation → always injection risk (dynamic content)
-            if _is_dynamic_string(sql_arg):
+            # Case 1: f-string / concat / %-format / .format() → dynamic → risk
+            if _is_dynamic_string(sql_arg) or _is_format_string(sql_arg) or _is_percent_format(sql_arg):
                 findings.append(self._make(sql_arg, context))
                 continue
 

@@ -25,7 +25,9 @@ class SSRF(Rule):
             func = _func_name(node.func)
             if func in HTTP_CLIENTS and node.args:
                 arg = node.args[0]
-                if isinstance(arg, ast.Call):
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    continue
+                if _is_user_supplied(arg):
                     findings.append(self._make(node, func, context))
         return findings
 
@@ -35,6 +37,14 @@ class SSRF(Rule):
                        line=node.lineno or 0, severity=self.severity,
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
                        fix="Validate URL against a whitelist of allowed domains")
+
+
+def _is_user_supplied(node):
+    if isinstance(node, ast.Call):
+        return True
+    if isinstance(node, (ast.Name, ast.Attribute)):
+        return True
+    return False
 
 
 def _func_name(node):

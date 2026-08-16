@@ -20,7 +20,7 @@ def _is_dynamic_path(node):
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return True
     # function call: open(get_input()) - clearly user input
-    return isinstance(node, ast.Call)
+    return isinstance(node, (ast.Call, ast.Name, ast.Attribute))
 
 
 @register
@@ -47,7 +47,7 @@ class PathTraversal(Rule):
             # Pattern 2: os.path.join(variable, ...) or similar
             if func in SUSPICIOUS_JOIN and node.args:
                 for arg in node.args:
-                    if isinstance(arg, ast.Call):
+                    if _is_user_supplied(arg):
                         findings.append(self._make_join(node, func, context))
                         break
 
@@ -66,6 +66,14 @@ class PathTraversal(Rule):
                        file=str(ctx.file_path), line=node.lineno or 0, severity=self.severity,
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
                        fix="Whitelist allowed paths before joining with user input")
+
+
+def _is_user_supplied(node):
+    if isinstance(node, ast.Call):
+        return True
+    if isinstance(node, (ast.Name, ast.Attribute)):
+        return True
+    return False
 
 
 def _func_name(node):
