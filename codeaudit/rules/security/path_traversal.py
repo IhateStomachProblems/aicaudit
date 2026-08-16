@@ -69,11 +69,7 @@ class PathTraversal(Rule):
 
 
 def _is_user_supplied(node):
-    if isinstance(node, ast.Call):
-        return True
-    if isinstance(node, (ast.Name, ast.Attribute)):
-        return True
-    return False
+    return isinstance(node, (ast.Call, ast.Name, ast.Attribute))
 
 
 def _func_name(node):
