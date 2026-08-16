@@ -52,43 +52,7 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
     _print_summary(all_findings, len(files), elapsed, lang)
 
     if ai_verify and all_findings:
-        from pathlib import Path as _P
-
-        from codeaudit.graph import CodeGraph
-        from codeaudit.llm.client import filter_verified, verify_findings
-        snippets = {f.line: f.snippet or "" for f in all_findings}
-        # Build code graph for evidence-chain context
-        try:
-            graph = CodeGraph(base_root or _P("."))
-            graph.build()
-            evidence_chains = {}
-            for f in all_findings:
-                key = f.rule_id + ":" + f.file + ":" + str(f.line)
-                chains = graph.find_evidence_chain(f.rule_id, max_depth=3)
-                if chains:
-                    evidence_chains[key] = chains
-        except Exception:  # noqa: BLE001 - graph failure is non-fatal
-            evidence_chains = {}
-        # AI verify with evidence chains
-        verified = verify_findings(all_findings, snippets, evidence_chains)
-        real = filter_verified(verified)
-        print(f"  AI verdict: {len(all_findings)} static -> {len(real)} confirmed")
-        if evidence_chains:
-            total_chains = sum(len(v) for v in evidence_chains.values())
-            print(f"  Evidence chains: {total_chains} paths traced")
-        # Convert dicts back to Finding objects
-        converted = []
-        for v in real:
-            sev = v.get("ai_severity") or v.get("severity", "warning")
-            converted.append(Finding(
-                rule_id=v["rule_id"], message=v["message"],
-                message_zh=v.get("message_zh", v["message"]),
-                file=v["file"], line=v["line"],
-                severity=Severity(sev),
-                snippet=v.get("snippet"), fix=v.get("ai_suggested_fix") or v.get("fix"),
-            ))
-        all_findings = converted
-
+        all_findings = _ai_verify_findings(all_findings, base_root)
     return all_findings
 
 
@@ -158,3 +122,43 @@ def _scan_single_file(file_path, sel_rules, min_severity, lang):
         except Exception as exc:  # noqa: BLE001 - isolate rule failures
             print(f"  Rule {rule_cls.id} failed: {exc}")
     return findings
+
+
+def _ai_verify_findings(all_findings, base_root):
+    """Run AI verification on findings with evidence-chain context."""
+    from pathlib import Path as _P
+
+    from codeaudit.graph import CodeGraph
+    from codeaudit.llm.client import filter_verified, verify_findings
+    from codeaudit.rules.base import Severity as _Sev
+
+    snippets = {f.line: f.snippet or "" for f in all_findings}
+    try:
+        graph = CodeGraph(base_root or _P("."))
+        graph.build()
+        evidence_chains = {}
+        for f in all_findings:
+            key = f.rule_id + ":" + f.file + ":" + str(f.line)
+            chains = graph.find_evidence_chain(f.rule_id, max_depth=3)
+            if chains:
+                evidence_chains[key] = chains
+    except Exception:  # noqa: BLE001
+        evidence_chains = {}
+
+    verified = verify_findings(all_findings, snippets, evidence_chains)
+    real = filter_verified(verified)
+    print(f"  AI verdict: {len(all_findings)} static -> {len(real)} confirmed")
+    if evidence_chains:
+        print(f"  Evidence chains: {sum(len(v) for v in evidence_chains.values())} paths traced")
+
+    converted = []
+    for v in real:
+        sev = v.get("ai_severity") or v.get("severity", "warning")
+        converted.append(Finding(
+            rule_id=v["rule_id"], message=v["message"],
+            message_zh=v.get("message_zh", v["message"]),
+            file=v["file"], line=v["line"],
+            severity=_Sev(sev),
+            snippet=v.get("snippet"), fix=v.get("ai_suggested_fix") or v.get("fix"),
+        ))
+    return converted

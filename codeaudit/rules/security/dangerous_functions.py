@@ -2,24 +2,22 @@ import ast
 
 from codeaudit.rules.base import Finding, Rule, Severity, register
 
-# Core dangerous functions (always flagged)
 DANGEROUS = {
     "eval": Severity.CRITICAL, "exec": Severity.CRITICAL,
     "pickle.loads": Severity.CRITICAL, "pickle.load": Severity.CRITICAL,
-    "marshal.load": Severity.CRITICAL, "marshal.loads": Severity.CRITICAL,
+    "marshal.loads": Severity.CRITICAL, "marshal.load": Severity.CRITICAL,
     "shelve.open": Severity.CRITICAL,
     "os.system": Severity.ERROR, "os.popen": Severity.ERROR,
     "yaml.load": Severity.ERROR,
     "compile": Severity.WARNING, "__import__": Severity.WARNING,
     "code.interact": Severity.ERROR, "code.InteractiveInterpreter": Severity.ERROR,
+    "shutil.rmtree": Severity.WARNING, "webbrowser.open": Severity.WARNING,
+    "telnetlib.Telnet": Severity.ERROR, "ftplib.FTP": Severity.ERROR,
     "input": Severity.WARNING,
 }
 
-# Subprocess: dangerous only when shell=True
 SUBPROCESS_FUNCS = {"subprocess.call", "subprocess.Popen", "subprocess.run"}
 SUBPROCESS_SHELL_ALWAYS = {"subprocess.getoutput", "subprocess.getstatusoutput"}
-
-# ctypes: native code loading
 CTYPES_LOADERS = {"ctypes.CDLL", "ctypes.WinDLL", "ctypes.OleDLL", "ctypes.PyDLL"}
 
 
@@ -28,8 +26,6 @@ class DangerousFunctions(Rule):
     id = "S003"
     name = "dangerous-functions"
     severity = Severity.ERROR
-    description = "Detect dangerous functions: eval, exec, pickle, marshal, shelve, os.popen, ctypes, compile, etc."
-    description_zh = "检测危险函数：eval、exec、pickle、marshal、shelve、os.popen、ctypes等"
 
     def check(self, tree, context):
         findings = []
@@ -46,28 +42,21 @@ class DangerousFunctions(Rule):
         return findings
 
     def _make(self, node, func, sev, ctx):
-        line = node.lineno or 0
-        return Finding(
-            rule_id=self.id,
-            message=f"Use of dangerous function '{func}'",
-            message_zh=f"使用了危险函数 '{func}'",
-            file=str(ctx.file_path), line=line, severity=sev,
-            snippet=ctx.lines[line - 1].strip() if line else None,
-            fix=f"Avoid '{func}()'. Use a safe alternative or validate input strictly.",
-        )
+        return Finding(rule_id=self.id, message=f"Use of dangerous function '{func}'",
+                       message_zh=f"使用了危险函数 '{func}'", file=str(ctx.file_path),
+                       line=node.lineno or 0, severity=sev,
+                       snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
+                       fix=f"Avoid '{func}()'. Use a safe alternative.")
 
 
 def _func_name(node):
-    if isinstance(node, ast.Name):
-        return node.id
+    if isinstance(node, ast.Name): return node.id
     if isinstance(node, ast.Attribute):
         parts = []
         cur = node
         while isinstance(cur, ast.Attribute):
-            parts.append(cur.attr)
-            cur = cur.value
-        if isinstance(cur, ast.Name):
-            parts.append(cur.id)
+            parts.append(cur.attr); cur = cur.value
+        if isinstance(cur, ast.Name): parts.append(cur.id)
         return ".".join(reversed(parts))
     return ""
 

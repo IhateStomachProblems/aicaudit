@@ -25,7 +25,7 @@ class SSRF(Rule):
             func = _func_name(node.func)
             if func in HTTP_CLIENTS and node.args:
                 arg = node.args[0]
-                if isinstance(arg, (ast.Name, ast.Attribute)):
+                if isinstance(arg, ast.Call):
                     findings.append(self._make(node, func, context))
         return findings
 

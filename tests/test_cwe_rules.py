@@ -19,7 +19,7 @@ def make_context(code):
 
 # ---------- S004 Path traversal ----------
 def test_path_traversal_detected():
-    code = 'data = open(user_input, "r")'
+    code = 'data = open(get_input(), "r")'
     tree, ctx = make_context(code)
     findings = PathTraversal().check(tree, ctx)
     assert len(findings) == 1
@@ -34,7 +34,7 @@ def test_path_traversal_literal_safe():
 
 # ---------- S005 SSRF ----------
 def test_ssrf_detected():
-    code = "resp = requests.get(url_from_user)"
+    code = "resp = requests.get(get_user_url())"
     tree, ctx = make_context(code)
     findings = SSRF().check(tree, ctx)
     assert len(findings) == 1

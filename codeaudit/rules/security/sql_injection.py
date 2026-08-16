@@ -1,4 +1,4 @@
-﻿import ast
+import ast
 
 from codeaudit.rules.base import Finding, Rule, Severity, register
 

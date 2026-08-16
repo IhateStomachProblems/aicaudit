@@ -27,7 +27,7 @@ KEY_PATTERNS = re.compile(
     r"mongodb(?:\+srv)?://[a-zA-Z0-9]+:[^@]+@|"
     r"postgresql://[a-zA-Z0-9]+:[^@]+@|"
     r"mysql://[a-zA-Z0-9]+:[^@]+@|"
-    r"redis://[a-zA-Z0-9]+:[^@]+@|"
+    r"redis://(:[^@]*@|[a-zA-Z0-9]+:[^@]+@)|"
     r"https://[a-zA-Z0-9]+:[^@]+@)",
     re.IGNORECASE
 )
