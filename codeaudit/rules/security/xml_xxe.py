@@ -3,6 +3,9 @@ import ast
 
 from codeaudit.rules.base import Finding, Rule, Severity, register
 
+# Known safe parser patterns
+_SAFE_PATTERNS = ("defusedxml",)
+
 
 def _is_unsafe_xml(func):
     """Check if a function name looks like an unsafe XML parser."""
@@ -17,7 +20,37 @@ def _is_unsafe_xml(func):
         return True
     if "xml.dom" in lower and "parse" in lower:
         return True
-    return func in ("ET.parse", "etree.parse", "ET.fromstring")
+    # Handle common import aliases
+    if func in ("ET.parse", "etree.parse", "ET.fromstring", "ElementTree.parse"):
+        return True
+    return False
+
+
+def _is_safe_parser(node):
+    """Check if the call uses a safe XML parser (defusedxml or resolve_entities=False)."""
+    # Check keyword arguments for resolve_entities=False
+    for kw in node.keywords:
+        if kw.arg == "resolve_entities":
+            if isinstance(kw.value, ast.Constant) and kw.value.value is False:
+                return True
+    # Check if any argument references a defusedxml parser
+    for arg in list(node.args) + [kw.value for kw in node.keywords]:
+        if _references_defusedxml(arg):
+            return True
+    return False
+
+
+def _references_defusedxml(node):
+    """Recursively check if a node references defusedxml."""
+    if isinstance(node, ast.Name):
+        return "defusedxml" in node.id.lower()
+    if isinstance(node, ast.Attribute):
+        if "defusedxml" in node.attr.lower():
+            return True
+        return _references_defusedxml(node.value)
+    if isinstance(node, ast.Call):
+        return _references_defusedxml(node.func)
+    return False
 
 
 @register
@@ -36,8 +69,7 @@ class XXE(Rule):
             func = _func_name(node.func)
             if not _is_unsafe_xml(func):
                 continue
-            # Skip if resolve_entities=False is explicitly set
-            if any(kw.arg == "resolve_entities" for kw in node.keywords):
+            if _is_safe_parser(node):
                 continue
             findings.append(self._make(node, func, context))
         return findings

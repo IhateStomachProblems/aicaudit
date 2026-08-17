@@ -3,10 +3,13 @@ import ast
 
 from codeaudit.rules.base import Finding, Rule, Severity, register
 
-HTTP_CLIENTS = {"requests.get", "requests.post", "requests.put", "requests.delete",
-                "requests.patch", "requests.request", "urlopen", "urllib.request.urlopen",
-                "httpx.get", "httpx.post", "httpx.put", "httpx.Client",
-                "aiohttp.ClientSession.get", "aiohttp.ClientSession.post"}
+HTTP_CLIENTS = {
+    "requests.get", "requests.post", "requests.put", "requests.delete",
+    "requests.patch", "requests.request", "urlopen", "urllib.request.urlopen",
+    "urlretrieve", "urllib.request.urlretrieve",
+    "httpx.get", "httpx.post", "httpx.put", "httpx.Client",
+    "aiohttp.ClientSession.get", "aiohttp.ClientSession.post",
+}
 
 
 @register
