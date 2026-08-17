@@ -7,6 +7,7 @@ import click
 from codeaudit.config import find_project_root, merge_config
 from codeaudit.output.json_output import dump_json
 from codeaudit.output.markdown_output import dump_markdown
+from codeaudit.output.sarif_output import dump_sarif
 from codeaudit.scan import _import_all_rules, scan
 
 
@@ -18,8 +19,8 @@ def main():
 
 @main.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True))
-@click.option("--output", "-o", type=click.Choice(["json", "markdown"]), default="markdown",
-              help="Output format: json or markdown")
+@click.option("--output", "-o", type=click.Choice(["json", "markdown", "sarif"]), default="markdown",
+              help="Output format: json, markdown, or sarif")
 @click.option("--lang", type=click.Choice(["en", "zh"]), default="en",
               help="Output language: en or zh")
 @click.option("--ai", is_flag=True, help="Use AI to verify findings (experimental)")
@@ -53,6 +54,8 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
 
     if output == "json":
         click.echo(dump_json(findings, lang=lang))
+    elif output == "sarif":
+        click.echo(dump_sarif(findings, lang=lang))
     else:
         click.echo(dump_markdown(findings, lang=lang))
 
