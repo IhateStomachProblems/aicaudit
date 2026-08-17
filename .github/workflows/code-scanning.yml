@@ -1,0 +1,38 @@
+name: CodeAudit Code Scanning
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * *"   # daily scan
+
+jobs:
+  codeaudit-scan:
+    name: CodeAudit SARIF scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CodeAudit
+        run: |
+          pip install --upgrade pip
+          pip install codeaudit  # or: pip install -e .
+
+      - name: Run CodeAudit scan
+        run: codeaudit scan . --output sarif > codeaudit.sarif
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: codeaudit.sarif
