@@ -1,5 +1,6 @@
 """Tests for relay/transit market support (custom OpenAI-compatible endpoints)."""
 
+import json
 import os
 
 from codeaudit.llm.client import AiConfig, _call_llm, load_ai_config
@@ -44,11 +45,13 @@ def test_relay_uses_openai_compat_path():
     from unittest import mock
     cfg = AiConfig(provider="relay", model="gpt-4o-mini", api_key="sk-x",
                    api_base="https://relay.example.com/v1")
-    mock_resp = b"."
+    mock_response = json.dumps({
+        "choices": [{"message": {"content": "[]"}}]
+    }).encode()
     class FakeResp:
         def __enter__(self): return self
         def __exit__(self, *a): return False
-        def read(self): return mock_resp
+        def read(self): return mock_response
     with mock.patch("urllib.request.urlopen", return_value=FakeResp()) as m:
         _call_llm("test", cfg)
         req = m.call_args[0][0]

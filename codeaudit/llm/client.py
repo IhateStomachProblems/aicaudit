@@ -1,10 +1,10 @@
-
 """LLM client: multi-provider AI verification with evidence-chain context."""
 
 from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 
 
@@ -73,23 +73,44 @@ def _finding_to_dict(f):
 def _llm_verify(findings, code_snippets, evidence_chains, cfg):
     if not cfg.api_key and cfg.provider not in ("ollama",):
         return _mock_verify(findings)
-    prompt = _build_deep_prompt(findings, code_snippets, evidence_chains)
-    response = _call_llm(prompt, cfg)
-    return _parse_deep_response(response, findings, evidence_chains)
+    batch_size = 10
+    all_results = []
+    for start in range(0, len(findings), batch_size):
+        batch = findings[start:start + batch_size]
+        prompt = _build_deep_prompt(batch, code_snippets, evidence_chains, start)
+        response = _call_llm_with_retry(prompt, cfg, retries=2)
+        batch_results = _parse_deep_response(response, batch, evidence_chains)
+        all_results.extend(batch_results)
+    return all_results
 
 
-def _build_deep_prompt(findings, code_snippets, evidence_chains):
+def _call_llm_with_retry(prompt, cfg, retries=2):
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            return _call_llm(prompt, cfg)
+        except Exception as e:
+            last_error = str(e)
+            if attempt < retries:
+                time.sleep(1 * (attempt + 1))
+    return json.dumps({"error": "LLM call failed after " + str(retries + 1) + " attempts: " + str(last_error)})
+
+
+def _build_deep_prompt(findings, code_snippets, evidence_chains, offset=0):
     parts = [
-        "You are a senior security code reviewer. For each finding, determine:\n",
-        "- is_real: true/false (is this a genuine vulnerability?)\n",
-        "- severity: info/warning/error/critical (re-assess!)\n",
-        "- vuln_type: e.g. SQL-injection, XSS, command-injection, secret-leak\n",
-        "- suggested_fix: concise concrete fix advice (2-3 sentences max)\n",
-        "- reason: why you decided this (1-2 sentences)\n",
-        "\nRespond ONLY as JSON array:\n",
+        "You are a senior security code reviewer. Analyze each finding and respond",
+        "with a JSON array of objects. Each object MUST have these fields:\n",
+        "- index: integer (the finding number, starting from " + str(offset) + ")\n",
+        "- is_real: boolean (true = genuine vulnerability, false = false positive)\n",
+        "- severity: string (info, warning, error, critical)\n",
+        "- vuln_type: string (e.g. SQL-injection, secret-leak, command-injection)\n",
+        "- suggested_fix: string (concise fix advice, 2-3 sentences)\n",
+        "- reason: string (why you decided this, 1-2 sentences)\n",
+        "\nRespond ONLY with the JSON array, no other text.\n\n",
     ]
     for i, f in enumerate(findings):
-        parts.append("=== Finding [" + str(i) + "] ===\n")
+        idx = offset + i
+        parts.append("=== Finding [" + str(idx) + "] ===\n")
         parts.append("Rule: " + f.rule_id + " | Static severity: " + f.severity.value + "\n")
         parts.append("Message: " + f.message + "\n")
         parts.append("File: " + f.file + ":" + str(f.line) + "\n")
@@ -99,8 +120,14 @@ def _build_deep_prompt(findings, code_snippets, evidence_chains):
         if chains:
             parts.append("Evidence chain (" + str(len(chains)) + " paths):\n")
             for c in chains[:2]:
-                entries = " -> ".join(str(fp) + ":" + str(ln) + "(" + str(fn) + ")" for fp, ln, fn in c.path)
-                parts.append("  Entry: " + c.entry + " | Path: " + entries + " | Sink: " + c.sink + " | Risk: " + c.risk + "\n")
+                entries = " -> ".join(
+                    str(fp) + ":" + str(ln) + "(" + str(fn) + ")"
+                    for fp, ln, fn in c.path
+                )
+                parts.append(
+                    "  Entry: " + c.entry + " | Path: " + entries
+                    + " | Sink: " + c.sink + " | Risk: " + c.risk + "\n"
+                )
         parts.append("\n")
     return "".join(parts)
 
@@ -113,35 +140,38 @@ def _call_llm(prompt, cfg):
 
 def _call_openai_compat(prompt, cfg):
     import urllib.request
-    body = json.dumps({"model": cfg.model, "messages": [
-        {"role": "system", "content": "Respond with valid JSON only."},
-        {"role": "user", "content": prompt},
-    ], "temperature": cfg.temperature, "max_tokens": cfg.max_tokens}).encode("utf-8")
+    body = json.dumps({
+        "model": cfg.model,
+        "messages": [
+            {"role": "system", "content": "Respond with valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": cfg.temperature,
+        "max_tokens": cfg.max_tokens,
+    }).encode("utf-8")
     headers = {"Content-Type": "application/json", "User-Agent": "codeaudit-ai"}
     if cfg.api_key:
         headers["Authorization"] = "Bearer " + cfg.api_key
-    req = urllib.request.Request(
-        cfg.api_base.rstrip("/") + "/chat/completions",
-        data=body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            result = json.load(resp)
-            return result["choices"][0]["message"]["content"]
-    except Exception:  # noqa: BLE001
-        return json.dumps({"error": "openai call failed"})
+    endpoint = cfg.api_base.rstrip("/") + "/chat/completions"
+    req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
+    resp = urllib.request.urlopen(req, timeout=60)
+    result = json.load(resp)
+    return result["choices"][0]["message"]["content"]
 
 
 def _call_claude(prompt, cfg):
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=cfg.api_key or os.environ.get("ANTHROPIC_API_KEY", ""))
-        msg = client.messages.create(
-            model=cfg.model, max_tokens=cfg.max_tokens, temperature=cfg.temperature,
-            system="Respond with valid JSON only. No other text.",
-            messages=[{"role": "user", "content": prompt}])
-        return msg.content[0].text
-    except Exception:  # noqa: BLE001
-        return json.dumps({"error": "claude call failed"})
+    import anthropic
+    client = anthropic.Anthropic(
+        api_key=cfg.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    msg = client.messages.create(
+        model=cfg.model,
+        max_tokens=cfg.max_tokens,
+        temperature=cfg.temperature,
+        system="Respond with valid JSON only. No other text.",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return msg.content[0].text
 
 
 def _parse_deep_response(response_text, findings, evidence_chains):
@@ -149,7 +179,10 @@ def _parse_deep_response(response_text, findings, evidence_chains):
     try:
         verdicts = json.loads(response_text)
         if isinstance(verdicts, list):
-            vmap = {v["index"]: v for v in verdicts if isinstance(v, dict) and "index" in v}
+            vmap = {}
+            for v in verdicts:
+                if isinstance(v, dict) and "index" in v:
+                    vmap[v["index"]] = v
             for i, f in enumerate(findings):
                 if i in vmap:
                     v = vmap[i]
@@ -163,9 +196,11 @@ def _parse_deep_response(response_text, findings, evidence_chains):
                     d["evidence_used"] = (evidence_chains or {}).get(key, [])
                     results.append(d)
                 else:
-                    results.append(_mark_verified(f, "No verdict from AI"))
+                    results.append(
+                        _mark_verified(f, "No verdict from AI for index " + str(i))
+                    )
             return results
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, ValueError):
         pass
     return [_mark_verified(f, "Fallback: AI response parsing failed") for f in findings]
 
