@@ -26,6 +26,9 @@ dependencies = [
     "click>=8.0",
     "tomli>=2.0; python_version<'3.11'",
     "anthropic>=0.40.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "jinja2>=3.0",
 ]
 
 [project.urls]
@@ -45,6 +48,7 @@ packages = [
     "codeaudit.rules.quality",
     "codeaudit.rules.performance",
     "codeaudit.output",
+    "codeaudit.web",
 ]
 
 [tool.ruff.lint.per-file-ignores]

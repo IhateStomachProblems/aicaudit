@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="p-6 max-w-5xl">
+  <h1 class="text-2xl font-bold mb-6">Rules ({{ rules|length }})</h1>
+
+  <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-gray-950/50">
+          <th class="text-left px-4 py-3 text-gray-400 font-medium">ID</th>
+          <th class="text-left px-4 py-3 text-gray-400 font-medium">Name</th>
+          <th class="text-left px-4 py-3 text-gray-400 font-medium">Severity</th>
+          <th class="text-left px-4 py-3 text-gray-400 font-medium">Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rule in rules %}
+        <tr class="border-t border-gray-800 hover:bg-gray-800/30">
+          <td class="px-4 py-3">
+            <span class="font-mono text-codeaudit-400">{{ rule.id }}</span>
+          </td>
+          <td class="px-4 py-3">{{ rule.name }}</td>
+          <td class="px-4 py-3">
+            <span class="text-xs px-2 py-0.5 rounded-full {%
+              if rule.severity == 'critical' %}bg-red-500/10 text-red-400{%
+              elif rule.severity == 'error' %}bg-orange-500/10 text-orange-400{%
+              elif rule.severity == 'warning' %}bg-yellow-500/10 text-yellow-400{%
+              else %}bg-blue-500/10 text-blue-400{% endif %}">{{ rule.severity }}</span>
+          </td>
+          <td class="px-4 py-3 text-gray-400 text-xs">{{ rule.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

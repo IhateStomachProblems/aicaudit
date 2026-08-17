@@ -18,6 +18,17 @@ def main():
 
 
 @main.command()
+@click.option("--host", default="127.0.0.1", help="Host to bind")
+@click.option("--port", default=8080, help="Port to bind")
+@click.option("--reload", is_flag=True, help="Auto-reload on changes")
+def web(host, port, reload):
+    """Start CodeAudit Web UI."""
+    from codeaudit.web.server import run_server
+    run_server(host=host, port=port, reload=reload)
+
+
+
+@main.command()
 @click.argument("paths", nargs=-1, type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Choice(["json", "markdown", "sarif"]), default="markdown",
               help="Output format: json, markdown, or sarif")
