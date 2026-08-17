@@ -6,10 +6,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-197%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-204%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
+  <img src="https://img.shields.io/badge/SARIF-2.1-blue" alt="SARIF"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/codeaudit?style=social" alt="Stars"/>
 </p>
 
@@ -25,8 +26,14 @@ pip install codeaudit
 # Scan a file or directory
 codeaudit scan ./src
 
-# JSON output (for CI / AI agent integration)
+# Markdown report (default)
+codeaudit scan ./src --output markdown
+
+# JSON output (for CI / scripts / AI agent integration)
 codeaudit scan ./src --output json
+
+# SARIF 2.1 output (GitHub Code Scanning compatible)
+codeaudit scan ./src --output sarif
 
 # Chinese language
 codeaudit scan ./src --lang zh
@@ -82,6 +89,28 @@ eval(user_input)  # codeaudit: ignore
 
 ---
 
+## GitHub Code Scanning Integration
+
+CodeAudit produces [SARIF 2.1](https://sarifweb.azurewebsites.net/) output compatible with GitHub Code Scanning:
+
+```bash
+codeaudit scan ./src --output sarif > codeaudit.sarif
+```
+
+Upload the result in a GitHub Actions workflow:
+
+```yaml
+- name: Run CodeAudit
+  run: codeaudit scan . --output sarif > codeaudit.sarif
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: codeaudit.sarif
+```
+
+---
+
 ## Caveats
 
 CodeAudit is a young project. Here are some honest limitations:
@@ -97,17 +126,18 @@ CodeAudit is a young project. Here are some honest limitations:
 
 | Scenario | Time |
 |----------|------|
-| 33 files directory | ~0.12s |
+| 35 files directory | ~0.13s |
 | Single file | ~0.01s |
 
 ---
 
 ## Testing
 
-- 197 unit tests (pytest)
+- 204 unit tests (pytest)
 - 91% code coverage (pytest-cov)
-- Integration tests for CLI, JSON output, Chinese output
+- Integration tests for CLI, JSON, Markdown, SARIF, Chinese output
 - Self-scan validation: we audit our own codebase
+- CI: GitHub Actions on Python 3.10–3.13 (ruff + mypy + coverage + self-scan)
 
 ---
 
@@ -172,6 +202,7 @@ pip install codeaudit
 codeaudit scan ./项目目录    # 扫描项目
 codeaudit scan ./src --lang zh  # 使用中文输出
 codeaudit scan ./src --output json  # JSON 输出
+codeaudit scan ./src --output sarif  # SARIF 输出（GitHub Code Scanning 兼容）
 ```
 
 ## 规则列表
@@ -190,6 +221,24 @@ query = f"SELECT * FROM users WHERE id={user_id}"  # codeaudit: ignore S001
 eval(user_input)  # codeaudit: ignore
 ```
 
+## GitHub Code Scanning 集成
+
+```bash
+codeaudit scan ./src --output sarif > codeaudit.sarif
+```
+
+在 GitHub Actions 中上传结果：
+
+```yaml
+- name: Run CodeAudit
+  run: codeaudit scan . --output sarif > codeaudit.sarif
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: codeaudit.sarif
+```
+
 ## 注意事项
 
 - 目前仅支持 Python — 更多语言正在规划中
@@ -199,4 +248,4 @@ eval(user_input)  # codeaudit: ignore
 
 ## 测试
 
-197 个单元测试，91% 代码覆盖率，CLI/JSON/中文输出集成测试。
+204 个单元测试，91% 代码覆盖率，CLI/JSON/Markdown/SARIF/中文输出集成测试。
