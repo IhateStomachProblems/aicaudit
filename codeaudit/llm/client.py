@@ -138,6 +138,20 @@ def _call_llm(prompt, cfg):
     return _call_openai_compat(prompt, cfg)
 
 
+def _extract_response_text(message):
+    """Extract text from LLM response message.
+
+    Some models (e.g. GLM-5.2) put the actual response in 'reasoning_content'
+    when content is empty. This function handles both cases.
+    """
+    content = message.get("content", "") or ""
+    if not content.strip():
+        reasoning = message.get("reasoning_content", "") or ""
+        if reasoning.strip():
+            return reasoning
+    return content
+
+
 def _call_openai_compat(prompt, cfg):
     import urllib.request
     body = json.dumps({
@@ -156,7 +170,8 @@ def _call_openai_compat(prompt, cfg):
     req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
     resp = urllib.request.urlopen(req, timeout=60)
     result = json.load(resp)
-    return result["choices"][0]["message"]["content"]
+    message = result["choices"][0]["message"]
+    return _extract_response_text(message)
 
 
 def _call_claude(prompt, cfg):
