@@ -3,12 +3,12 @@
 import ast
 from pathlib import Path
 
-from codeaudit.rules.base import ScanContext
-from codeaudit.rules.quality.bare_except import BareExcept
-from codeaudit.rules.quality.magic_numbers import MagicNumbers
-from codeaudit.rules.quality.todo_comment import TodoComment
-from codeaudit.rules.quality.undefined_name import UndefinedName
-from codeaudit.rules.quality.unused_variable import UnusedVariable
+from aicaudit.rules.base import ScanContext
+from aicaudit.rules.quality.bare_except import BareExcept
+from aicaudit.rules.quality.magic_numbers import MagicNumbers
+from aicaudit.rules.quality.todo_comment import TodoComment
+from aicaudit.rules.quality.undefined_name import UndefinedName
+from aicaudit.rules.quality.unused_variable import UnusedVariable
 
 
 def make_context(code):

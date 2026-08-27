@@ -3,13 +3,13 @@ import io
 import json
 from unittest import mock
 
-from codeaudit.llm.client import (
+from aicaudit.llm.client import (
     AiConfig,
     _build_deep_prompt,
     _call_llm,
     _llm_verify,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(line=1, rule_id="S001"):
@@ -38,7 +38,7 @@ def test_llm_verify_mocked_success():
     findings = [make_finding()]
     cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test", api_base="https://api.openai.com/v1")
     mock_response = json.dumps({"choices": [{"message": {"content": json.dumps([{"index": 0, "is_real": True, "reason": "ok"}])}}]})
-    with mock.patch("urllib.request.urlopen", return_value=FakeResp(mock_response.encode())) as m:
+    with mock.patch("urllib.request.urlopen", return_value=FakeResp(mock_response.encode())):
         results = _llm_verify(findings, {1: "x=1"}, {}, cfg)
     assert len(results) == 1
     assert results[0]["ai_verified"] == True

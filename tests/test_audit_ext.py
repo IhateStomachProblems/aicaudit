@@ -4,8 +4,8 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from codeaudit.audit import _build_file_function_map, _entry_in_file, run_audit
-from codeaudit.graph import CodeGraph, EntryPoint
+from aicaudit.audit import _build_file_function_map, _entry_in_file, run_audit
+from aicaudit.graph import CodeGraph, EntryPoint
 
 
 def _make_project():
@@ -23,9 +23,9 @@ def _make_project():
 def _run_with_ai(verdict):
     d = _make_project()
     with mock.patch.dict("os.environ", {
-        "CODEAUDIT_AI_PROVIDER": "openai", "CODEAUDIT_AI_KEY": "sk-test",
-        "CODEAUDIT_AI_BASE": "https://api.openai.com/v1",
-    }), mock.patch("codeaudit.audit.verify_findings", side_effect=_fake_verify(verdict)):
+        "AICAUDIT_AI_PROVIDER": "openai", "AICAUDIT_AI_KEY": "sk-test",
+        "AICAUDIT_AI_BASE": "https://api.openai.com/v1",
+    }), mock.patch("aicaudit.audit.verify_findings", side_effect=_fake_verify(verdict)):
         report = run_audit([str(d)], lang="en", use_ai=True)
     return report
 def _fake_verify(verdict):

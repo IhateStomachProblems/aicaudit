@@ -4,15 +4,15 @@ import os
 import tempfile
 from pathlib import Path
 
-from codeaudit.config import (
+from aicaudit.config import (
     find_project_root,
     load_pyproject,
     matches_ignore,
     merge_config,
 )
-from codeaudit.fix import FixStatus, _apply_fix_to_line, fix_file
-from codeaudit.llm.client import _parse_deep_response
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.fix import FixStatus, _apply_fix_to_line, fix_file
+from aicaudit.llm.client import _parse_deep_response
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(rule_id="S001", line=1, msg="test", file="test.py"):

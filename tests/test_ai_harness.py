@@ -1,17 +1,17 @@
 """Tests for AI harness: batching, retry, edge cases."""
-import json
 import io
+import json
 from unittest import mock
 
-from codeaudit.llm.client import (
+from aicaudit.llm.client import (
     AiConfig,
+    _build_deep_prompt,
     _call_llm_with_retry,
     _llm_verify,
-    _build_deep_prompt,
-    _parse_deep_response,
     _mock_verify,
+    _parse_deep_response,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(rule_id="S001", line=1, file="test.py"):
@@ -71,7 +71,7 @@ def test_retry_on_failure_then_succeeds():
     def mock_urlopen(req, **kw):
         call_count[0] += 1
         if call_count[0] == 1:
-            raise Exception("first attempt failed")
+            raise RuntimeError("first attempt failed")
         body = json.loads(req.data)
         user_msg = body["messages"][1]["content"]
         indices = [int(line.split("[").pop().split("]")[0])

@@ -2,13 +2,13 @@
 import ast
 from pathlib import Path
 
-from codeaudit.rules.base import ScanContext
-from codeaudit.rules.security.dangerous_functions import DangerousFunctions
-from codeaudit.rules.security.path_traversal import PathTraversal
-from codeaudit.rules.security.secret_leak import SecretLeak
-from codeaudit.rules.security.ssrf import SSRF
-from codeaudit.rules.security.weak_crypto import WeakCrypto
-from codeaudit.rules.security.xml_xxe import XXE
+from aicaudit.rules.base import ScanContext
+from aicaudit.rules.security.dangerous_functions import DangerousFunctions
+from aicaudit.rules.security.path_traversal import PathTraversal
+from aicaudit.rules.security.secret_leak import SecretLeak
+from aicaudit.rules.security.ssrf import SSRF
+from aicaudit.rules.security.weak_crypto import WeakCrypto
+from aicaudit.rules.security.xml_xxe import XXE
 
 
 def make_context(code):

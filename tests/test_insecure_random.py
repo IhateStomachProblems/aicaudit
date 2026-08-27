@@ -2,8 +2,8 @@
 import ast
 from pathlib import Path
 
-from codeaudit.rules.base import ScanContext, Severity
-from codeaudit.rules.security.insecure_random import InsecureRandom
+from aicaudit.rules.base import ScanContext, Severity
+from aicaudit.rules.security.insecure_random import InsecureRandom
 
 
 def make_context(code):

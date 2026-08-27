@@ -1,12 +1,12 @@
-# Contributing to CodeAudit
+# Contributing to AICAudit
 
 Thanks for considering contributing! Here's what you need to know.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/IhateStomachProblems/codeaudit.git
-cd codeaudit
+git clone https://github.com/IhateStomachProblems/aicaudit.git
+cd aicaudit
 pip install -e .
 pip install pytest pytest-cov ruff mypy
 ```
@@ -22,14 +22,14 @@ pytest tests/ -v
 Before submitting a PR, ensure:
 
 ```bash
-ruff check codeaudit tests
-mypy codeaudit --ignore-missing-imports
-pytest tests/ --cov=codeaudit --cov-fail-under=95
+ruff check aicaudit tests
+mypy aicaudit --ignore-missing-imports
+pytest tests/ --cov=aicaudit --cov-fail-under=95
 ```
 
 ## Adding a New Rule
 
-1. Create `codeaudit/rules/<category>/<name>.py`
+1. Create `aicaudit/rules/<category>/<name>.py`
 2. Subclass `Rule`, set `id`, `name`, `severity`, and implement `check()`
 3. Decorate with `@register`
 4. Add it to `_import_all_rules()` in `scan.py`

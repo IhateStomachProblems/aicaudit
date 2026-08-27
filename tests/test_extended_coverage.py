@@ -3,7 +3,7 @@
 import ast
 from pathlib import Path
 
-from codeaudit.rules.base import (
+from aicaudit.rules.base import (
     Finding,
     Rule,
     ScanContext,
@@ -15,20 +15,13 @@ from codeaudit.rules.base import (
 )
 
 # Import all rule modules to ensure they are registered
-from codeaudit.rules.performance.complexity import Complexity
-from codeaudit.rules.performance.nesting_depth import NestingDepth
-from codeaudit.rules.quality.bare_except import BareExcept
-from codeaudit.rules.quality.magic_numbers import MagicNumbers
-from codeaudit.rules.quality.todo_comment import TodoComment
-from codeaudit.rules.quality.undefined_name import UndefinedName
-from codeaudit.rules.quality.unused_variable import UnusedVariable
-from codeaudit.rules.security.dangerous_functions import DangerousFunctions
-from codeaudit.rules.security.path_traversal import PathTraversal
-from codeaudit.rules.security.secret_leak import SecretLeak
-from codeaudit.rules.security.sql_injection import SqlInjection
-from codeaudit.rules.security.ssrf import SSRF
-from codeaudit.rules.security.weak_crypto import WeakCrypto
-from codeaudit.rules.security.xml_xxe import XXE
+from aicaudit.rules.performance.complexity import Complexity
+from aicaudit.rules.quality.magic_numbers import MagicNumbers
+from aicaudit.rules.quality.undefined_name import UndefinedName
+from aicaudit.rules.quality.unused_variable import UnusedVariable
+from aicaudit.rules.security.dangerous_functions import DangerousFunctions
+from aicaudit.rules.security.secret_leak import SecretLeak
+from aicaudit.rules.security.sql_injection import SqlInjection
 
 
 def make_context(code):

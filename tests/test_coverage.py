@@ -9,17 +9,17 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from codeaudit.cli import main
-from codeaudit.config import merge_config
-from codeaudit.fix import FixStatus, fix_file
-from codeaudit.llm.client import (
+from aicaudit.cli import main
+from aicaudit.config import merge_config
+from aicaudit.fix import FixStatus, fix_file
+from aicaudit.llm.client import (
     AiConfig,
     _mock_verify,
     _parse_deep_response,
     load_ai_config,
     verify_findings,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(rule_id="S001", line=1, msg="test", snippet="x=1", file="test.py"):
@@ -29,10 +29,10 @@ def make_finding(rule_id="S001", line=1, msg="test", snippet="x=1", file="test.p
 # ---------- __main__ ----------
 
 def test_main_module_entry():
-    """python -m codeaudit --help should work."""
-    r = subprocess.run([sys.executable, "-m", "codeaudit", "--help"], capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(__file__)), encoding="utf-8", errors="replace", check=False)
+    """python -m aicaudit --help should work."""
+    r = subprocess.run([sys.executable, "-m", "aicaudit", "--help"], capture_output=True, text=True, cwd=os.path.dirname(os.path.dirname(__file__)), encoding="utf-8", errors="replace", check=False)
     assert r.returncode == 0
-    assert "CodeAudit" in r.stdout
+    assert "AICAudit" in r.stdout
 
 
 # ---------- config edge cases ----------
@@ -47,7 +47,7 @@ def test_config_no_pyproject():
 def test_config_pyproject_with_rules():
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
-        (d / "pyproject.toml").write_text("[tool.codeaudit]\nrules = [\"S001\", \"Q001\"]\nmin-severity = \"error\"\n", encoding="utf-8")
+        (d / "pyproject.toml").write_text("[tool.aicaudit]\nrules = [\"S001\", \"Q001\"]\nmin-severity = \"error\"\n", encoding="utf-8")
         cfg = merge_config(None, None, d)
         assert cfg.rules == {"S001", "Q001"}
         assert cfg.min_severity == "error"
@@ -56,8 +56,8 @@ def test_config_pyproject_with_rules():
 def test_config_pyproject_ignore():
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
-        (d / "pyproject.toml").write_text("[tool.codeaudit]\nignore = [\"tests/\"]\n", encoding="utf-8")
-        (d / ".codeauditignore").write_text("venv/\n", encoding="utf-8")
+        (d / "pyproject.toml").write_text("[tool.aicaudit]\nignore = [\"tests/\"]\n", encoding="utf-8")
+        (d / ".aicauditignore").write_text("venv/\n", encoding="utf-8")
         cfg = merge_config(None, None, d)
         assert "tests/" in cfg.ignore_patterns
         assert "venv/" in cfg.ignore_patterns
@@ -66,7 +66,7 @@ def test_config_pyproject_ignore():
 def test_cli_scan_with_config():
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
-        (d / "pyproject.toml").write_text("[tool.codeaudit]\nmin-severity = \"error\"\n", encoding="utf-8")
+        (d / "pyproject.toml").write_text("[tool.aicaudit]\nmin-severity = \"error\"\n", encoding="utf-8")
         (d / "main.py").write_text("eval('1+1')", encoding="utf-8")
         r = CliRunner().invoke(main, ["scan", td])
         assert r.exit_code == 0
@@ -123,27 +123,27 @@ def test_load_ai_config_mock_default():
 
 
 def test_ai_config_openai():
-    os.environ["CODEAUDIT_AI_PROVIDER"] = "openai"
-    os.environ["CODEAUDIT_AI_KEY"] = "sk-test"
+    os.environ["AICAUDIT_AI_PROVIDER"] = "openai"
+    os.environ["AICAUDIT_AI_KEY"] = "sk-test"
     cfg = load_ai_config()
     assert cfg.provider == "openai"
     assert cfg.model == "gpt-4o-mini"
-    del os.environ["CODEAUDIT_AI_PROVIDER"]
-    del os.environ["CODEAUDIT_AI_KEY"]
+    del os.environ["AICAUDIT_AI_PROVIDER"]
+    del os.environ["AICAUDIT_AI_KEY"]
 
 
 def test_ai_config_ollama():
-    os.environ["CODEAUDIT_AI_PROVIDER"] = "ollama"
+    os.environ["AICAUDIT_AI_PROVIDER"] = "ollama"
     cfg = load_ai_config()
     assert cfg.provider == "ollama"
-    del os.environ["CODEAUDIT_AI_PROVIDER"]
+    del os.environ["AICAUDIT_AI_PROVIDER"]
 
 
 def test_ai_config_openrouter():
-    os.environ["CODEAUDIT_AI_PROVIDER"] = "openrouter"
+    os.environ["AICAUDIT_AI_PROVIDER"] = "openrouter"
     cfg = load_ai_config()
     assert cfg.provider == "openrouter"
-    del os.environ["CODEAUDIT_AI_PROVIDER"]
+    del os.environ["AICAUDIT_AI_PROVIDER"]
 
 
 def test_mock_verify_empty():

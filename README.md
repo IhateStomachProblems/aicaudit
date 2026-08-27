@@ -1,4 +1,4 @@
-# CodeAudit 🛡️
+# AICAudit 🛡️
 
 > AI-powered code audit CLI for Python — security, quality, and performance analysis.
 >
@@ -6,12 +6,12 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-204%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-230%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
   <img src="https://img.shields.io/badge/SARIF-2.1-blue" alt="SARIF"/>
-  <img src="https://img.shields.io/github/stars/IhateStomachProblems/codeaudit?style=social" alt="Stars"/>
+  <img src="https://img.shields.io/github/stars/IhateStomachProblems/aicaudit?style=social" alt="Stars"/>
 </p>
 
 ---
@@ -19,24 +19,25 @@
 ## Quick Start
 
 ```bash
-pip install codeaudit
+# From source (PyPI package arrives with v0.2.0)
+pip install git+https://github.com/IhateStomachProblems/aicaudit.git
 ```
 
 ```bash
 # Scan a file or directory
-codeaudit scan ./src
+aicaudit scan ./src
 
 # Markdown report (default)
-codeaudit scan ./src --output markdown
+aicaudit scan ./src --output markdown
 
 # JSON output (for CI / scripts / AI agent integration)
-codeaudit scan ./src --output json
+aicaudit scan ./src --output json
 
 # SARIF 2.1 output (GitHub Code Scanning compatible)
-codeaudit scan ./src --output sarif
+aicaudit scan ./src --output sarif
 
 # Chinese language
-codeaudit scan ./src --lang zh
+aicaudit scan ./src --lang zh
 ```
 
 ---
@@ -81,39 +82,52 @@ Suppress specific findings with inline comments:
 
 ```python
 # Ignore a specific rule on this line
-query = f"SELECT * FROM users WHERE id={user_id}"  # codeaudit: ignore S001
+query = f"SELECT * FROM users WHERE id={user_id}"  # aicaudit: ignore S001
 
 # Ignore all rules on this line
-eval(user_input)  # codeaudit: ignore
+eval(user_input)  # aicaudit: ignore
 ```
+
+---
+
+## Web UI
+
+Prefer a browser over the terminal? Start the built-in web interface:
+
+```bash
+aicaudit web          # http://127.0.0.1:8080
+```
+
+Pages: Dashboard, Scan, Rules, AI Config. API docs at `/docs` (Swagger UI).
+The web UI is young — report anything that feels off.
 
 ---
 
 ## GitHub Code Scanning Integration
 
-CodeAudit produces [SARIF 2.1](https://sarifweb.azurewebsites.net/) output compatible with GitHub Code Scanning:
+AICAudit produces [SARIF 2.1](https://sarifweb.azurewebsites.net/) output compatible with GitHub Code Scanning:
 
 ```bash
-codeaudit scan ./src --output sarif > codeaudit.sarif
+aicaudit scan ./src --output sarif > aicaudit.sarif
 ```
 
 Upload the result in a GitHub Actions workflow:
 
 ```yaml
-- name: Run CodeAudit
-  run: codeaudit scan . --output sarif > codeaudit.sarif
+- name: Run AICAudit
+  run: aicaudit scan . --output sarif > aicaudit.sarif
 
 - name: Upload SARIF
   uses: github/codeql-action/upload-sarif@v3
   with:
-    sarif_file: codeaudit.sarif
+    sarif_file: aicaudit.sarif
 ```
 
 ---
 
 ## Caveats
 
-CodeAudit is a young project. Here are some honest limitations:
+AICAudit is a young project. Here are some honest limitations:
 
 - **Python only** for now — other languages are planned
 - **Static analysis** — not a runtime security tool
@@ -133,9 +147,9 @@ CodeAudit is a young project. Here are some honest limitations:
 
 ## Testing
 
-- 204 unit tests (pytest)
+- 230 unit tests (pytest)
 - 91% code coverage (pytest-cov)
-- Integration tests for CLI, JSON, Markdown, SARIF, Chinese output
+- Integration tests for CLI, JSON, Markdown, SARIF, Web UI, Chinese output
 - Self-scan validation: we audit our own codebase
 - CI: GitHub Actions on Python 3.10–3.13 (ruff + mypy + coverage + self-scan)
 
@@ -143,20 +157,20 @@ CodeAudit is a young project. Here are some honest limitations:
 
 ## AI Configuration
 
-CodeAudit supports multiple LLM providers for AI-powered verification.
+AICAudit supports multiple LLM providers for AI-powered verification.
 
 ### Direct API
 
 ```bash
 # OpenAI
-export CODEAUDIT_AI_PROVIDER=openai
-export CODEAUDIT_AI_KEY=sk-xxx
-codeaudit scan ./src --ai
+export AICAUDIT_AI_PROVIDER=openai
+export AICAUDIT_AI_KEY=sk-xxx
+aicaudit scan ./src --ai
 
 # Claude
-export CODEAUDIT_AI_PROVIDER=claude
+export AICAUDIT_AI_PROVIDER=claude
 export ANTHROPIC_API_KEY=sk-ant-xxx
-codeaudit scan ./src --ai
+aicaudit scan ./src --ai
 ```
 
 ### Relay / Proxy Service (中转接口)
@@ -165,11 +179,11 @@ Any OpenAI-compatible relay service works. Set the provider to `relay` and point
 
 ```bash
 # Example: API2D, OhMyGPT, NewAPI, OneAPI, etc.
-export CODEAUDIT_AI_PROVIDER=relay
-export CODEAUDIT_AI_BASE=https://your-relay.com/v1
-export CODEAUDIT_AI_KEY=sk-your-key
-export CODEAUDIT_AI_MODEL=gpt-4o-mini
-codeaudit scan ./src --ai
+export AICAUDIT_AI_PROVIDER=relay
+export AICAUDIT_AI_BASE=https://your-relay.com/v1
+export AICAUDIT_AI_KEY=sk-your-key
+export AICAUDIT_AI_MODEL=gpt-4o-mini
+aicaudit scan ./src --ai
 ```
 
 Also accepts `custom` or `proxy` as provider names for the same behavior.
@@ -177,8 +191,8 @@ Also accepts `custom` or `proxy` as provider names for the same behavior.
 ### Local Models
 
 ```bash
-export CODEAUDIT_AI_PROVIDER=ollama
-codeaudit scan ./src --ai
+export AICAUDIT_AI_PROVIDER=ollama
+aicaudit scan ./src --ai
 ```
 
 ---
@@ -193,16 +207,17 @@ MIT © IhateStomachProblems
 
 ---
 
-# CodeAudit 中文版
+# AICAudit 中文版
 
 ## 快速开始
 
 ```bash
-pip install codeaudit
-codeaudit scan ./项目目录    # 扫描项目
-codeaudit scan ./src --lang zh  # 使用中文输出
-codeaudit scan ./src --output json  # JSON 输出
-codeaudit scan ./src --output sarif  # SARIF 输出（GitHub Code Scanning 兼容）
+# 源码安装（v0.2.0 将上架 PyPI）
+pip install git+https://github.com/IhateStomachProblems/aicaudit.git
+aicaudit scan ./项目目录    # 扫描项目
+aicaudit scan ./src --lang zh  # 使用中文输出
+aicaudit scan ./src --output json  # JSON 输出
+aicaudit scan ./src --output sarif  # SARIF 输出（GitHub Code Scanning 兼容）
 ```
 
 ## 规则列表
@@ -215,28 +230,28 @@ codeaudit scan ./src --output sarif  # SARIF 输出（GitHub Code Scanning 兼�
 
 ```python
 # 忽略特定规则
-query = f"SELECT * FROM users WHERE id={user_id}"  # codeaudit: ignore S001
+query = f"SELECT * FROM users WHERE id={user_id}"  # aicaudit: ignore S001
 
 # 忽略该行所有规则
-eval(user_input)  # codeaudit: ignore
+eval(user_input)  # aicaudit: ignore
 ```
 
 ## GitHub Code Scanning 集成
 
 ```bash
-codeaudit scan ./src --output sarif > codeaudit.sarif
+aicaudit scan ./src --output sarif > aicaudit.sarif
 ```
 
 在 GitHub Actions 中上传结果：
 
 ```yaml
-- name: Run CodeAudit
-  run: codeaudit scan . --output sarif > codeaudit.sarif
+- name: Run AICAudit
+  run: aicaudit scan . --output sarif > aicaudit.sarif
 
 - name: Upload SARIF
   uses: github/codeql-action/upload-sarif@v3
   with:
-    sarif_file: codeaudit.sarif
+    sarif_file: aicaudit.sarif
 ```
 
 ## 注意事项
@@ -248,4 +263,4 @@ codeaudit scan ./src --output sarif > codeaudit.sarif
 
 ## 测试
 
-204 个单元测试，91% 代码覆盖率，CLI/JSON/Markdown/SARIF/中文输出集成测试。
+230 个单元测试，91% 代码覆盖率，CLI/JSON/Markdown/SARIF/Web UI/中文输出集成测试。

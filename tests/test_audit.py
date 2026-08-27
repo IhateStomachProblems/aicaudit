@@ -2,8 +2,8 @@
 import tempfile
 from pathlib import Path
 
-from codeaudit.audit import _find_containing_func, run_audit
-from codeaudit.graph import CodeGraph
+from aicaudit.audit import _find_containing_func, run_audit
+from aicaudit.graph import CodeGraph
 
 
 def test_audit_basic_no_ai():
@@ -46,5 +46,5 @@ def test_audit_report_structure():
         (d / "x.py").write_text("eval('1')\n", encoding="utf-8")
         report = run_audit([str(d)], lang="en", use_ai=False)
         assert {"tool", "version", "paths", "scan", "ai", "issues"}.issubset(report.keys())
-        assert report["tool"] == "codeaudit"
+        assert report["tool"] == "aicaudit"
         assert isinstance(report["issues"], list)

@@ -6,8 +6,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from codeaudit.cli import main
-from codeaudit.config import find_project_root, load_ignore_file, merge_config
+from aicaudit.cli import main
+from aicaudit.config import find_project_root, load_ignore_file, merge_config
 
 
 def test_merge_config_cli_rules_override():
@@ -22,7 +22,7 @@ def test_merge_config_min_severity():
 
 def test_load_ignore_file():
     with tempfile.TemporaryDirectory() as td:
-        (Path(td) / ".codeauditignore").write_text(
+        (Path(td) / ".aicauditignore").write_text(
             "build/\n# comment\ndist/\n", encoding="utf-8"
         )
         patterns = load_ignore_file(Path(td))
@@ -32,7 +32,7 @@ def test_load_ignore_file():
 def test_find_project_root():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
-        (root / "pyproject.toml").write_text("[tool.codeaudit]\n", encoding="utf-8")
+        (root / "pyproject.toml").write_text("[tool.aicaudit]\n", encoding="utf-8")
         sub = root / "src" / "pkg"
         sub.mkdir(parents=True)
         assert find_project_root(sub) == root
@@ -65,7 +65,7 @@ def test_min_severity_filter_cli():
 def test_ignore_patterns_cli():
     with tempfile.TemporaryDirectory() as td:
         d = Path(td)
-        (d / ".codeauditignore").write_text("generated/\n", encoding="utf-8")
+        (d / ".aicauditignore").write_text("generated/\n", encoding="utf-8")
         sub = d / "generated"
         sub.mkdir()
         (sub / "bad.py").write_text("exec('x')\n", encoding="utf-8")

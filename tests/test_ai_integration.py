@@ -1,26 +1,33 @@
-"""Integration test: real AI harness against AIXForge API with GLM-5.2.
+"""Integration test: real AI harness against an OpenAI-compatible relay API.
 
-NOTE: This test uses a test API key provided for validation purposes.
-The key is for testing only and should not be used in production.
+Set the environment variables below to run the live tests; they are skipped
+automatically when no key is configured:
+
+    AICAUDIT_AI_KEY=sk-...
+    AICAUDIT_AI_BASE=https://api.aixforge.com/v1
+    AICAUDIT_AI_MODEL=glm-5.2
 """
-import json
+import os
 
 import pytest
 
-from codeaudit.llm.client import (
+from aicaudit.llm.client import (
     AiConfig,
     _build_deep_prompt,
     _call_openai_compat,
     _extract_response_text,
-    _parse_deep_response,
     _llm_verify,
+    _parse_deep_response,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
-# Test API key (for validation only)
-TEST_API_KEY = "sk-pumt5cGbfp65IF8jX4XhlP5X0ddb3Dp97Gdl8cQlDaudGqjW"
-TEST_API_BASE = "https://api.aixforge.com/v1"
-TEST_MODEL = "glm-5.2"
+TEST_API_KEY = os.environ.get("AICAUDIT_AI_KEY", "")
+TEST_API_BASE = os.environ.get("AICAUDIT_AI_BASE", "https://api.aixforge.com/v1")
+TEST_MODEL = os.environ.get("AICAUDIT_AI_MODEL", "glm-5.2")
+
+requires_live_ai = pytest.mark.skipif(
+    not TEST_API_KEY, reason="AICAUDIT_AI_KEY not set; live AI tests skipped"
+)
 
 
 def _cfg():
@@ -50,6 +57,7 @@ class TestAIIntegration:
         msg3 = {"content": "Direct answer"}
         assert _extract_response_text(msg3) == "Direct answer"
 
+    @requires_live_ai
     def test_single_finding_verification(self):
         """AI analyzes a single SQL injection finding."""
         finding = make_finding(
@@ -71,6 +79,7 @@ class TestAIIntegration:
         assert r["ai_severity"] in ("error", "critical")
         assert len(r["ai_reason"]) > 10
 
+    @requires_live_ai
     def test_false_positive_detection(self):
         """AI correctly identifies a parameterized query as safe."""
         finding = make_finding(
@@ -91,6 +100,7 @@ class TestAIIntegration:
         r = results[0]
         assert r["ai_verified"] is False
 
+    @requires_live_ai
     def test_multi_finding_batch(self):
         """AI analyzes a batch of mixed findings."""
         findings = [
@@ -114,6 +124,7 @@ class TestAIIntegration:
             assert "ai_verified" in r
             assert len(r.get("ai_reason", "")) > 5
 
+    @requires_live_ai
     def test_full_pipeline_with_retry(self):
         """Full _llm_verify pipeline: batching + retry + parse."""
         findings = [

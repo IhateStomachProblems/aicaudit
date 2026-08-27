@@ -2,9 +2,9 @@
 import json, subprocess, sys, ast
 sys.stdout.reconfigure(encoding="utf-8")
 PYTHON = r"D:\Users\17390\AppData\Local\Programs\Python\Python313\python.exe"
-PROJ_DIR = r"D:\Desktop\开源git项目\codeaudit"
+PROJ_DIR = r"D:\Desktop\开源git项目\aicaudit"
 
-r = subprocess.run([PYTHON, "-m", "codeaudit", "scan", "test_industry/security/s004_s007_new_rules.py", "--output", "json"], capture_output=True, text=True, cwd=PROJ_DIR)
+r = subprocess.run([PYTHON, "-m", "aicaudit", "scan", "test_industry/security/s004_s007_new_rules.py", "--output", "json"], capture_output=True, text=True, cwd=PROJ_DIR)
 d = json.loads(r.stdout[r.stdout.index("{"):])
 print("S007 所有发现:")
 for f in d["findings"]:

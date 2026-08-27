@@ -1,4 +1,4 @@
-﻿# CodeAudit 项目完整规划
+﻿# AICAudit 项目完整规划
 
 ## 一、项目目标
 
@@ -12,7 +12,7 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                     CodeAudit 功能全景                        │
+│                     AICAudit 功能全景                        │
 ├──────────────────────────────────────────────────────────────┤
 │  已完成 (Phase 1)              │  待开发 (Phase 2-3)          │
 ├──────────────────────────────────────────────────────────────┤
@@ -20,10 +20,10 @@
 │  ✅ CLI 基本命令                │  🔲 Go 审计 (6条规则)       │
 │  ✅ 规则过滤 --rules            │  🔲 Rust 审计 (6条规则)     │
 │  ✅ 严重度过滤 --min-severity   │  🔲 AI 误报过滤 --ai       │
-│  ✅ 路径忽略 .codeauditignore   │  🔲 自动修复 --fix         │
+│  ✅ 路径忽略 .aicauditignore   │  🔲 自动修复 --fix         │
 │  ✅ 配置文件 pyproject.toml     │  🔲 SARIF 输出             │
 │  ✅ 中英双语输出                │  🔲 PyPI 发布              │
-│  ✅ JSON + Markdown 报告        │  🔲 交互式配置 codeaudit init│
+│  ✅ JSON + Markdown 报告        │  🔲 交互式配置 aicaudit init│
 │  ✅ CI 自动测试 (4版Python)     │  🔲 更多规则 (每条20+条)    │
 │  ✅ 67 测试 / 97% 覆盖率        │  🔲 规则市场 (用户贡献)     │
 └──────────────────────────────────────────────────────────────┘
@@ -41,7 +41,7 @@
 | 质量规则 (Q001-Q005) | ✅ |
 | 性能规则 (P001-P002) | ✅ |
 | CLI scan/rules 命令 | ✅ |
-| 配置系统 (pyproject.toml + .codeauditignore) | ✅ |
+| 配置系统 (pyproject.toml + .aicauditignore) | ✅ |
 | 过滤 (--rules, --min-severity) | ✅ |
 | 中英双语 | ✅ |
 | JSON + Markdown 输出 | ✅ |
@@ -110,7 +110,7 @@
 
 **子目标 3.3：发布筹备（D6-D7）**
 
-- [ ] PyPI 发布（`pip install codeaudit`）
+- [ ] PyPI 发布（`pip install aicaudit`）
 - [ ] GitHub Release（含 CHANGELOG）
 - [ ] 首页截图 + Demo GIF
 - [ ] 发布文章（掘金 / V2EX / Hacker News）
@@ -124,7 +124,7 @@
 | 规则总数 | 34+ 条 |
 | 测试总数 | 150+ |
 | 覆盖率 | 97%+ |
-| 安装方式 | pip install codeaudit |
+| 安装方式 | pip install aicaudit |
 | CI | 4 版本 Python 全通过 |
 | 发布 | PyPI + GitHub Release |
 | AI 模式 | 可选，支持 OpenAPI + ollama |

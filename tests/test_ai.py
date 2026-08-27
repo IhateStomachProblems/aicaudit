@@ -2,13 +2,13 @@
 
 import json
 
-from codeaudit.llm.client import (
+from aicaudit.llm.client import (
     _mock_verify,
     _parse_deep_response,
     filter_verified,
     verify_findings,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(rule_id="S001", line=1, snippet="x = 1", msg="test"):
@@ -79,7 +79,7 @@ def test_ai_flag_works_on_cli():
 
     from click.testing import CliRunner
 
-    from codeaudit.cli import main
+    from aicaudit.cli import main
     with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False, encoding='utf-8') as f:
         f.write("exec('x')\n")
         fname = f.name

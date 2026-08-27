@@ -1,10 +1,9 @@
 """Tests for SARIF output format."""
 
 import json
-from pathlib import Path
 
-from codeaudit.output.sarif_output import dump_sarif, SARIF_SCHEMA, SARIF_VERSION
-from codeaudit.rules.base import Finding, Severity, all_rules
+from aicaudit.output.sarif_output import SARIF_SCHEMA, SARIF_VERSION, dump_sarif
+from aicaudit.rules.base import Finding, Severity
 
 
 def _make_finding(rule_id, msg, sev, line=1):
@@ -29,7 +28,7 @@ def test_sarif_has_runs():
 def test_sarif_tool_info():
     doc = json.loads(dump_sarif([]))
     driver = doc["runs"][0]["tool"]["driver"]
-    assert driver["name"] == "CodeAudit"
+    assert driver["name"] == "AICAudit"
     assert len(driver["rules"]) >= 15
 
 

@@ -2,14 +2,14 @@
 import json
 from unittest import mock
 
-from codeaudit.graph import EvidenceChain
-from codeaudit.llm.client import (
+from aicaudit.graph import EvidenceChain
+from aicaudit.llm.client import (
     AiConfig,
     _build_deep_prompt,
     _llm_verify,
     _parse_deep_response,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(rule_id="S001", line=5, file="app.py"):

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from codeaudit.graph import CodeGraph, EvidenceChain, FuncDef
+from aicaudit.graph import CodeGraph, EvidenceChain, FuncDef
 
 
 def test_codegraph_build():

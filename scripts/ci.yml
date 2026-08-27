@@ -25,10 +25,10 @@ jobs:
           pip install -e .
           pip install pytest pytest-cov ruff mypy
       - name: Ruff lint
-        run: ruff check codeaudit tests
+        run: ruff check aicaudit tests
       - name: Mypy type check
-        run: mypy codeaudit --ignore-missing-imports
+        run: mypy aicaudit --ignore-missing-imports
       - name: Run tests
-        run: pytest tests/ --cov=codeaudit --cov-report=term
+        run: pytest tests/ --cov=aicaudit --cov-report=term
       - name: Self-scan
-        run: codeaudit scan codeaudit/
+        run: aicaudit scan aicaudit/

@@ -3,14 +3,14 @@
 import os
 import tempfile
 
-from codeaudit.fix import (
+from aicaudit.fix import (
     FixResult,
     FixStatus,
     _apply_fix_to_line,
     _fix_undefined_name,
     fix_file,
 )
-from codeaudit.rules.base import Finding, Severity
+from aicaudit.rules.base import Finding, Severity
 
 
 def make_finding(rule_id="Q001", line=1, file="test.py"):

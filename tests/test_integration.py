@@ -7,7 +7,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from codeaudit.cli import main
+from aicaudit.cli import main
 
 
 def write_temp(code, suffix=".py"):
@@ -24,7 +24,7 @@ def test_scan_default_markdown():
     runner = CliRunner()
     result = runner.invoke(main, ["scan", path])
     assert result.exit_code == 0
-    assert "CodeAudit Report" in result.output
+    assert "AICAudit Report" in result.output
     assert "S003" in result.output
     os.unlink(path)
 

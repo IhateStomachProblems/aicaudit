@@ -8,7 +8,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from codeaudit.cli import main
+from aicaudit.cli import main
 
 
 def test_scan_default_cwd():
@@ -54,13 +54,13 @@ def test_scan_ai_flag_accepted():
 
 
 def test_main_module_entry():
-    # python -m codeaudit should work (exercises __main__.py)
+    # python -m aicaudit should work (exercises __main__.py)
     result = subprocess.run(
-        [sys.executable, "-m", "codeaudit", "--help"],
+        [sys.executable, "-m", "aicaudit", "--help"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False, cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
     assert result.returncode == 0
-    assert "CodeAudit" in result.stdout
+    assert "AICAudit" in result.stdout
 
 
 def test_dangerous_member_access_not_flag():
@@ -78,8 +78,8 @@ def test_dangerous_member_access_not_flag():
 def test_dangerous_lambda_call_safe():
     import ast as _ast
 
-    from codeaudit.rules.base import ScanContext
-    from codeaudit.rules.security.dangerous_functions import DangerousFunctions
+    from aicaudit.rules.base import ScanContext
+    from aicaudit.rules.security.dangerous_functions import DangerousFunctions
     code = "(lambda x: x + 1)(5)"
     tree = _ast.parse(code)
     ctx = ScanContext(file_path=Path("fake.py"), source=code, lines=code.splitlines(keepends=False))

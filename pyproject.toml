@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codeaudit"
+name = "aicaudit"
 version = "0.1.0"
 description = "AI-powered code audit CLI for Python projects. Static analysis + AI verification with evidence chains."
 readme = "README.md"
@@ -32,24 +32,27 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/IhateStomachProblems/codeaudit"
-Repository = "https://github.com/IhateStomachProblems/codeaudit"
-Documentation = "https://github.com/IhateStomachProblems/codeaudit"
+Homepage = "https://github.com/IhateStomachProblems/aicaudit"
+Repository = "https://github.com/IhateStomachProblems/aicaudit"
+Documentation = "https://github.com/IhateStomachProblems/aicaudit"
 
 [project.scripts]
-codeaudit = "codeaudit.cli:main"
+aicaudit = "aicaudit.cli:main"
 
 [tool.setuptools]
 packages = [
-    "codeaudit",
-    "codeaudit.llm",
-    "codeaudit.rules",
-    "codeaudit.rules.security",
-    "codeaudit.rules.quality",
-    "codeaudit.rules.performance",
-    "codeaudit.output",
-    "codeaudit.web",
+    "aicaudit",
+    "aicaudit.llm",
+    "aicaudit.rules",
+    "aicaudit.rules.security",
+    "aicaudit.rules.quality",
+    "aicaudit.rules.performance",
+    "aicaudit.output",
+    "aicaudit.web",
 ]
+
+[tool.setuptools.package-data]
+aicaudit = ["web/templates/*.html"]
 
 [tool.ruff.lint.per-file-ignores]
 "examples/*.py" = ["ALL"]

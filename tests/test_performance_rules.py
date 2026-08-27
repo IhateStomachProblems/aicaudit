@@ -3,9 +3,9 @@
 import ast
 from pathlib import Path
 
-from codeaudit.rules.base import ScanContext
-from codeaudit.rules.performance.complexity import Complexity
-from codeaudit.rules.performance.nesting_depth import NestingDepth
+from aicaudit.rules.base import ScanContext
+from aicaudit.rules.performance.complexity import Complexity
+from aicaudit.rules.performance.nesting_depth import NestingDepth
 
 
 def make_context(code):
