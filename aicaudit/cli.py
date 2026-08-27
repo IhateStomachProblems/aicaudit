@@ -48,7 +48,7 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
     # Load config (file + CLI overrides)
     cfg = merge_config(rules, min_severity, start)
 
-    click.echo(f"Scanning {len(paths)} path(s)...")
+    click.echo(f"Scanning {len(paths)} path(s)...", err=True)
     findings = scan(
         [Path(p) for p in paths],
         lang=lang,
@@ -60,7 +60,7 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
     )
 
     if not findings:
-        click.echo("No issues found.")
+        click.echo("No issues found.", err=True)
         return
 
     if output == "json":
@@ -83,8 +83,8 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
                 result = fix_file(str(p), [f], dry_run=True, backup=False)
                 if result.after and result.after != result.before:
                     _print_fix_diff(result)
-        click.echo("")
-        click.echo("Run with --apply-fix to actually apply fixes.")
+        click.echo("", err=True)
+        click.echo("Run with --apply-fix to actually apply fixes.", err=True)
 
 
 @main.command()
@@ -104,6 +104,7 @@ if __name__ == "__main__":
 def _print_fix_diff(result):
     """Print a unified diff for a proposed fix."""
     import difflib
+    import sys
     if result.before == result.after:
         return
     diff = difflib.unified_diff(
@@ -111,7 +112,7 @@ def _print_fix_diff(result):
         result.after.splitlines(keepends=True),
         fromfile=result.path, tofile=result.path + " (fixed)", n=2,
     )
-    print("".join(diff))
+    print("".join(diff), file=sys.stderr)
 
 
 @main.command()

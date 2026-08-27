@@ -36,7 +36,7 @@ def test_scan_json_output():
     runner = CliRunner()
     result = runner.invoke(main, ["scan", path, "--output", "json"])
     assert result.exit_code == 0
-    data = json.loads(result.output[result.output.index("{"):])
+    data = json.loads(result.output[result.output.index("{"):result.output.rindex("}") + 1])
     assert data["total"] >= 1
     assert data["findings"][0]["severity"] == "critical"
     os.unlink(path)
@@ -57,7 +57,7 @@ def test_scan_no_findings():
     path = write_temp("def add(a, b):\n    return a + b\n")
     runner = CliRunner()
     result = runner.invoke(main, ["scan", path])
-    assert "No issues found" in result.output
+    assert "No issues found" in result.output + getattr(result, "stderr", "")
     os.unlink(path)
 
 

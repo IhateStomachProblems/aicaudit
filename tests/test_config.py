@@ -57,7 +57,7 @@ def test_min_severity_filter_cli():
         fname = f.name
     try:
         r = CliRunner().invoke(main, ["scan", fname, "--min-severity", "warning"])
-        assert "No issues found" in r.output
+        assert "No issues found" in r.output + getattr(r, "stderr", "")
     finally:
         os.unlink(fname)
 

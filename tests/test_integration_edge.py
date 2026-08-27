@@ -37,7 +37,7 @@ def test_scan_directory_with_no_python_files():
         (p / "readme.txt").write_text("hello", encoding="utf-8")
         runner = CliRunner()
         result = runner.invoke(main, ["scan", tmpdir])
-        assert "No Python files found" in result.output
+        assert "No Python files found" in result.output + getattr(result, "stderr", "")
 
 
 def test_scan_ai_flag_accepted():

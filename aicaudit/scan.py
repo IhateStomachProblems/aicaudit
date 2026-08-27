@@ -2,6 +2,7 @@
 
 import ast
 import re
+import sys
 import time
 
 from aicaudit.rules.base import Finding, ScanContext, Severity, active_rules
@@ -41,7 +42,7 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
 
     files = _collect_python_files(paths, ignore_patterns or (), base_root)
     if not files:
-        print("No Python files found in " + str([str(p) for p in paths]))
+        print("No Python files found in " + str([str(p) for p in paths]), file=sys.stderr)
         return []
 
     start = time.time()
@@ -130,10 +131,10 @@ def _print_summary(findings, file_count, elapsed, lang):
         head = f"\nScan complete: {file_count} files, {len(findings)} findings, {elapsed:.2f}s"
         labels = {"critical": "CRITICAL", "error": "ERROR", "warning": "WARNING", "info": "INFO"}
 
-    print(head)
+    print(head, file=sys.stderr)
     for sev in ("critical", "error", "warning", "info"):
         if sev in counts:
-            print(f"  [{labels[sev].upper()}] {counts[sev]}")
+            print(f"  [{labels[sev].upper()}] {counts[sev]}", file=sys.stderr)
 
 
 def _scan_single_file(file_path, sel_rules, min_severity, lang):
@@ -162,7 +163,7 @@ def _scan_single_file(file_path, sel_rules, min_severity, lang):
                     continue
                 findings.append(f)
         except Exception as exc:  # noqa: BLE001 - isolate rule failures
-            print(f"  Rule {rule_cls.id} failed: {exc}")
+            print(f"  Rule {rule_cls.id} failed: {exc}", file=sys.stderr)
     return findings
 
 
@@ -189,9 +190,9 @@ def _ai_verify_findings(all_findings, base_root):
 
     verified = verify_findings(all_findings, snippets, evidence_chains)
     real = filter_verified(verified)
-    print(f"  AI verdict: {len(all_findings)} static -> {len(real)} confirmed")
+    print(f"  AI verdict: {len(all_findings)} static -> {len(real)} confirmed", file=sys.stderr)
     if evidence_chains:
-        print(f"  Evidence chains: {sum(len(v) for v in evidence_chains.values())} paths traced")
+        print(f"  Evidence chains: {sum(len(v) for v in evidence_chains.values())} paths traced", file=sys.stderr)
 
     converted = []
     for v in real:
