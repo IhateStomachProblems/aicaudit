@@ -30,16 +30,25 @@ class SSRF(Rule):
                 arg = node.args[0]
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     continue
+                # Taint-aware mode (full scans): engine-proven constant URLs
+                # (assigned literal / pure folds) do not fire.
+                if context.taint is not None:
+                    event = context.taint.event_for(node)
+                    if event is None:
+                        continue
+                    findings.append(self._make(node, func, context, event.paths))
+                    continue
                 if _is_user_supplied(arg):
                     findings.append(self._make(node, func, context))
         return findings
 
-    def _make(self, node, func, ctx):
+    def _make(self, node, func, ctx, taint_path=None):
         return Finding(rule_id=self.id, message=f"SSRF risk: user-controlled URL in '{func}()'",
                        message_zh=f"SSRF风险：用户可控URL传入 '{func}()'", file=str(ctx.file_path),
                        line=node.lineno or 0, severity=self.severity,
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
-                       fix="Validate URL against a whitelist of allowed domains")
+                       fix="Validate URL against a whitelist of allowed domains",
+                       cwe="CWE-918", taint_path=taint_path)
 
 
 def _is_user_supplied(node):

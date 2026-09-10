@@ -37,7 +37,10 @@ def _build_tool() -> dict:
                     "shortDescription": {"text": r.description},
                     "fullDescription": {"text": r.description_zh if r.description_zh else r.description},
                     "defaultConfiguration": {"level": SEVERITY_MAP.get(r.severity, "warning")},
-                    "properties": {"severity": r.severity.value, "tags": ["security", "code-quality"]},
+                    "properties": {
+                        "severity": r.severity.value,
+                        "tags": ["security", "code-quality"],
+                    },
                 }
                 for r in rule_objs
             ],
@@ -45,11 +48,36 @@ def _build_tool() -> dict:
     }
 
 
+def _location(file: str, line: int) -> dict:
+    return {
+        "physicalLocation": {
+            "artifactLocation": {"uri": file},
+            "region": {"startLine": line},
+        }
+    }
+
+
+def _build_code_flows(f: Finding) -> list[dict] | None:
+    """Render taint paths as SARIF codeFlows (GitHub renders these natively)."""
+    if not f.taint_path:
+        return None
+    flows = []
+    for path in f.taint_path[:2]:
+        locations = [_location(path.origin.file, path.origin.line)]
+        for hop in path.hops:
+            locations.append(_location(hop.file, hop.line))
+        flows.append({"locations": [{"location": loc} for loc in locations]})
+    return [{"threadFlows": flows}] if flows else None
+
+
 def _build_results(findings: list[Finding]) -> list[dict]:
     """Build results array from findings."""
     results = []
     for f in findings:
         msg_text = f.message + (f" Suggested fix: {f.fix}" if f.fix else "")
+        properties: dict = {"severity": f.severity.value}
+        if f.cwe:
+            properties["cwe"] = f.cwe
         result = {
             "ruleId": f.rule_id,
             "ruleIndex": -1,
@@ -66,8 +94,11 @@ def _build_results(findings: list[Finding]) -> list[dict]:
                     }
                 }
             ],
-            "properties": {"severity": f.severity.value},
+            "properties": properties,
         }
+        code_flows = _build_code_flows(f)
+        if code_flows:
+            result["codeFlows"] = code_flows
         results.append(result)
     return results
 

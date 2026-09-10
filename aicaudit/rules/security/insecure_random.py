@@ -39,6 +39,7 @@ class InsecureRandom(Rule):
             severity=self.severity,
             snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
             fix="Use secrets module: secrets.token_hex(), secrets.randbelow()",
+            cwe="CWE-338",
         )
 
 

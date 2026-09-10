@@ -36,21 +36,39 @@ class PathTraversal(Rule):
                 continue
             func = _func_name(node.func)
 
+            is_opener = func in FILE_OPENERS and node.args
+            is_join = func in SUSPICIOUS_JOIN and node.args
+            is_extract = func.endswith(("extract", "extractall")) and node.args
+            if not (is_opener or is_join or is_extract):
+                continue
+
+            # Taint-aware mode (full scans): the engine proved which arguments
+            # are constant/sanitized; only taint-or-unresolved arguments fire.
+            if context.taint is not None:
+                event = context.taint.event_for(node)
+                if event is None:
+                    continue
+                if is_join or is_extract:
+                    findings.append(self._make_join(node, func, context, event.paths))
+                else:
+                    findings.append(self._make(node, func, context, event.paths))
+                continue
+
             # Pattern 1: open(variable_or_dynamic_path)
-            if func in FILE_OPENERS and node.args:
+            if is_opener:
                 if _is_dynamic_path(node.args[0]):
                     findings.append(self._make(node, func, context))
                 continue
 
-            # Pattern 3: archive extraction (zip/tar slip) - match .extract/.extractall suffix
-            if (func.endswith(("extract", "extractall"))) and node.args:
+            # Pattern 3: archive extraction (zip/tar slip)
+            if is_extract:
                 for arg in node.args:
                     if _is_user_supplied(arg):
                         findings.append(self._make_join(node, func, context))
                         break
 
             # Pattern 2: os.path.join(variable, ...) or similar
-            if func in SUSPICIOUS_JOIN and node.args:
+            if is_join:
                 for arg in node.args:
                     if _is_user_supplied(arg):
                         findings.append(self._make_join(node, func, context))
@@ -58,19 +76,21 @@ class PathTraversal(Rule):
 
         return findings
 
-    def _make(self, node, func, ctx):
+    def _make(self, node, func, ctx, taint_path=None):
         return Finding(rule_id=self.id, message=f"Path traversal: user input in '{func}()'",
                        message_zh=f"路径遍历：用户输入传入 '{func}()'",
                        file=str(ctx.file_path), line=node.lineno or 0, severity=self.severity,
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
-                       fix="Validate and sanitize the path: use os.path.abspath() + allowed path check")
+                       fix="Validate and sanitize the path: use os.path.abspath() + allowed path check",
+                       cwe="CWE-22", taint_path=taint_path)
 
-    def _make_join(self, node, func, ctx):
+    def _make_join(self, node, func, ctx, taint_path=None):
         return Finding(rule_id=self.id, message="Path traversal: os.path.join() with user input",
                        message_zh="路径遍历：os.path.join() 包含用户输入",
                        file=str(ctx.file_path), line=node.lineno or 0, severity=self.severity,
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
-                       fix="Whitelist allowed paths before joining with user input")
+                       fix="Whitelist allowed paths before joining with user input",
+                       cwe="CWE-22", taint_path=taint_path)
 
 def _is_user_supplied(node):
     return isinstance(node, (ast.Call, ast.Name, ast.Attribute))

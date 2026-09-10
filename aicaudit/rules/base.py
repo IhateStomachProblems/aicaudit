@@ -6,6 +6,11 @@ import ast
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from aicaudit.taint.engine import TaintIndex
+    from aicaudit.taint.model import TaintPath
 
 
 class Severity(Enum):
@@ -25,6 +30,8 @@ class Finding:
     severity: Severity
     snippet: str | None = None
     fix: str | None = None
+    cwe: str | None = None                          # e.g. "CWE-89"
+    taint_path: list[TaintPath] | None = None       # source -> ... -> sink evidence
 
     def text(self, lang: str = "en") -> str:
         return self.message if lang == "en" else self.message_zh
@@ -33,10 +40,12 @@ class Finding:
 @dataclass
 class ScanContext:
     """What the scanner knows about the current file."""
+
     file_path: Path
     source: str
     lines: list[str]
     lang: str = "en"
+    taint: TaintIndex | None = None   # present in full scans (tree from engine)
 
 
 class Rule:

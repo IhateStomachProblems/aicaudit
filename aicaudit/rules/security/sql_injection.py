@@ -69,6 +69,23 @@ class SqlInjection(Rule):
 
             sql_arg = node.args[0]
 
+            # Case 3: plain string literal → safe (no external input)
+            # conn.execute("SELECT 1") or conn.execute("SELECT * FROM t", params) are fine
+            if isinstance(sql_arg, ast.Constant) and isinstance(sql_arg.value, str):
+                continue
+
+            # Taint-aware mode (full scans): the engine already decided whether
+            # a dangerous argument reaches this sink with taint or unresolved
+            # dynamics, and proved constants safe. Parameterization cannot
+            # excuse a dynamically-built SQL string (the empty params list of
+            # executemany does not sanitize concatenation).
+            if context.taint is not None:
+                event = context.taint.event_for(node)
+                if event is None:
+                    continue        # provably constant/sanitized — no risk
+                findings.append(self._make(sql_arg, context, event.paths))
+                continue
+
             # Case 1: f-string / concat / %-format / .format() → dynamic → risk
             if _is_dynamic_string(sql_arg) or _is_format_string(sql_arg) or _is_percent_format(sql_arg):
                 findings.append(self._make(sql_arg, context))
@@ -80,14 +97,9 @@ class SqlInjection(Rule):
                     findings.append(self._make(sql_arg, context))
                 continue
 
-            # Case 3: plain string literal → safe (no external input)
-            # conn.execute("SELECT 1") or conn.execute("SELECT * FROM t", params) are fine
-            if isinstance(sql_arg, ast.Constant) and isinstance(sql_arg.value, str):
-                continue
-
         return findings
 
-    def _make(self, node, ctx):
+    def _make(self, node, ctx, taint_path=None):
         return Finding(
             rule_id=self.id,
             message="SQL injection risk: query built with string formatting",
@@ -97,4 +109,6 @@ class SqlInjection(Rule):
             severity=self.severity,
             snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
             fix="Use parameterized queries: cursor.execute('SELECT * FROM t WHERE id = ?', (id,))",
+            cwe="CWE-89",
+            taint_path=taint_path,
         )

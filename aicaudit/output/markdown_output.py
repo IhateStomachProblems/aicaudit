@@ -24,10 +24,16 @@ def dump_markdown(findings: list[Finding], lang: str = "en") -> str:
             lines.append(f"### {f.rule_id}: {desc}")
             lines.append("")
             lines.append(f"- **File**: `{f.file}:{f.line}`")
+            if f.cwe:
+                lines.append(f"- **CWE**: {f.cwe}")
             if f.snippet:
                 lines.append(f"- **Snippet**: `{f.snippet}`")
             if f.fix:
                 lines.append(f"- **Fix**: {f.fix}")
+            if f.taint_path:
+                label = "污点路径" if lang == "zh" else "Taint path"
+                for p in f.taint_path[:2]:
+                    lines.append(f"- **{label}**: `{p.render()}`")
             lines.append("")
 
     return "\n".join(lines)

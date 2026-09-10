@@ -67,4 +67,5 @@ class SecretLeak(Rule):
             file=str(ctx.file_path), line=line, severity=self.severity,
             snippet=ctx.lines[line - 1].strip() if line else None,
             fix="Load from environment variable: os.environ['" + target.id.upper() + "']",
+            cwe="CWE-798",
         )

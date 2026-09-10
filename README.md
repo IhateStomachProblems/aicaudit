@@ -1,18 +1,42 @@
 # AICAudit 🛡️
 
-> AI-powered code audit CLI for Python — security, quality, and performance analysis.
+> Evidence-driven AI code audit for Python — every verdict ships with a machine-checkable taint path.
 >
-> AI 驱动的 Python 代码审计 CLI：安全、质量、性能一站式分析
+> 证据链驱动的 Python 代码审计：每个判定都附带可复核的污点传播路径（source → … → sink）
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-230%20passed-brightgreen" alt="Tests"/>
-  <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
+  <img src="https://img.shields.io/badge/tests-259%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/coverage-90%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
   <img src="https://img.shields.io/badge/SARIF-2.1-blue" alt="SARIF"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/aicaudit?style=social" alt="Stars"/>
 </p>
+
+---
+
+## Why AICAudit
+
+Other tools give you a verdict. AICAudit gives you the **evidence**:
+
+```text
+S001  app.py:16  SQL injection risk
+  taint path: app.py:14 request.args (Flask user input)
+            -> app.py:14 assigned to 'uid'
+            -> app.py:15 assigned to 'query'
+            -> app.py:16 conn.execute()
+```
+
+- **Taint engine** (pure Python, zero plugins): tracks user input from source
+  (Flask/Django/FastAPI request, `input()`, `os.environ`, `sys.argv`) through
+  assignments, f-strings, concatenation, and **across function boundaries** to
+  the sink — and proves constants safe, killing the classic false-positive
+  classes (`open(BASE_DIR/"x")`, constant SQL variables, `eval("1+1")`)
+- **AI verdicts with receipts**: the LLM sees the full function and the taint
+  path, not a one-line snippet — hallucination-resistant by construction
+- **SARIF codeFlows**: taint paths render natively in the GitHub Security tab
+- **Zero config**: `pip install` and scan; works offline, local LLMs supported
 
 ---
 
@@ -145,10 +169,37 @@ AICAudit is a young project. Here are some honest limitations:
 
 ---
 
+## Benchmarks
+
+Labeled corpus (104 cases: function-level samples + a realistic Flask app with
+planted vulnerabilities), scored against ground truth with an honest
+methodology — including the categories where aicaudit is deliberately
+conservative or deliberately silent. Bandit runs on the same corpus for
+reference; buckets Bandit does not cover are marked.
+
+| Rule | aicaudit P/R | Bandit P/R (comparable bucket) |
+|------|-------------|-------------------------------|
+| S001 SQL injection | 100% / 100% | 100% / 86% |
+| S003 dangerous functions | 100% / 100% | 92% / 75% |
+| S004 path traversal | 100% / 100% | no coverage |
+| S005 SSRF | 100% / 100% | no coverage |
+| S007 XXE | 100% / 100% | 100% / 50% |
+
+Full table with F1, timing, and the honest-notes section (design tiers,
+conservative flags): [benchmarks/RESULTS.md](benchmarks/RESULTS.md).
+Reproduce and challenge it yourself:
+
+```bash
+python benchmarks/run.py
+```
+
+---
+
 ## Testing
 
-- 230 unit tests (pytest)
-- 91% code coverage (pytest-cov)
+- 259 unit tests (pytest)
+- 90% code coverage (pytest-cov)
+- Taint engine: 17 dedicated tests (sources, constness, sanitizers, interprocedural)
 - Integration tests for CLI, JSON, Markdown, SARIF, Web UI, Chinese output
 - Self-scan validation: we audit our own codebase
 - CI: GitHub Actions on Python 3.10–3.13 (ruff + mypy + coverage + self-scan)
@@ -263,4 +314,4 @@ aicaudit scan ./src --output sarif > aicaudit.sarif
 
 ## 测试
 
-230 个单元测试，91% 代码覆盖率，CLI/JSON/Markdown/SARIF/Web UI/中文输出集成测试。
+259 个单元测试，90% 代码覆盖率，污点引擎专项测试 17 个，CLI/JSON/Markdown/SARIF/Web UI/中文输出集成测试。

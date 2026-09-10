@@ -63,12 +63,29 @@ class XXE(Rule):
     description_zh = "检测XXE：未禁用实体解析的XML解析"
 
     def check(self, tree, context):
+        from aicaudit.taint.imports import ImportTable, dotted_name
+
         findings = []
+        module_table = ImportTable.from_module(tree)
+
+        # scope-aware defusedxml resolution: `from defusedxml import
+        # ElementTree` inside one function must not whitelist the same name
+        # used by other functions in the file.
+        def scope_safe(node) -> bool:
+            table = module_table
+            owner = _enclosing_function(tree, node)
+            if owner is not None:
+                table = ImportTable.from_scope(owner, base=module_table)
+            canonical = dotted_name(node.func, table) or ""
+            return "defusedxml" in canonical
+
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             func = _func_name(node.func)
             if not _is_unsafe_xml(func):
+                continue
+            if scope_safe(node):
                 continue
             if _is_safe_parser(node):
                 continue
@@ -81,7 +98,23 @@ class XXE(Rule):
                        message_zh="XXE风险：未禁用实体解析的XML解析器",
                        file=str(ctx.file_path), line=node.lineno or 0,
                        severity=self.severity,
-                       fix="Disable external entities: XMLParser(resolve_entities=False)")
+                       fix="Disable external entities: XMLParser(resolve_entities=False)",
+                       cwe="CWE-611")
+
+
+def _enclosing_function(tree: ast.Module, node: ast.Call):
+    """Return the innermost function containing this call node (or None)."""
+    best = None
+    best_size: int | None = None
+    for func in ast.walk(tree):
+        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        end = func.end_lineno or func.lineno
+        if func.lineno <= node.lineno <= end:
+            size = end - func.lineno
+            if best is None or size < (best_size or 0):
+                best, best_size = func, size
+    return best
 
 
 def _func_name(node):

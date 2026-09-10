@@ -20,6 +20,16 @@ SUBPROCESS_FUNCS = {"subprocess.call", "subprocess.Popen", "subprocess.run"}
 SUBPROCESS_SHELL_ALWAYS = {"subprocess.getoutput", "subprocess.getstatusoutput"}
 CTYPES_LOADERS = {"ctypes.CDLL", "ctypes.WinDLL", "ctypes.OleDLL", "ctypes.PyDLL"}
 
+# Practice-level warnings that fire regardless of argument provenance.
+_PRACTICE_ALWAYS = {"input", "webbrowser.open", "shutil.rmtree", "compile", "__import__"}
+
+_FUNC_CWE = {
+    "eval": "CWE-95", "exec": "CWE-95", "compile": "CWE-95", "__import__": "CWE-95",
+    "pickle.loads": "CWE-502", "pickle.load": "CWE-502", "marshal.loads": "CWE-502",
+    "marshal.load": "CWE-502", "shelve.open": "CWE-502", "yaml.load": "CWE-502",
+    "os.system": "CWE-78", "os.popen": "CWE-78",
+}
+
 
 @register
 class DangerousFunctions(Rule):
@@ -34,6 +44,16 @@ class DangerousFunctions(Rule):
                 continue
             func = _func_name(node.func)
             if func in DANGEROUS:
+                # Taint-aware mode (full scans): calls whose arguments the
+                # engine proved constant/sanitized are not exploitable.
+                # Practice-level flags (input, compile, ...) stay on.
+                if context.taint is not None and func not in _PRACTICE_ALWAYS and node.args:
+                    event = context.taint.event_for(node)
+                    if event is None:
+                        continue
+                    findings.append(self._make(node, func, DANGEROUS[func], context,
+                                               taint_path=event.paths))
+                    continue
                 findings.append(self._make(node, func, DANGEROUS[func], context))
             elif func in SUBPROCESS_FUNCS and _has_shell_true(node):
                 findings.append(self._make(node, func, Severity.WARNING, context))
@@ -41,12 +61,13 @@ class DangerousFunctions(Rule):
                 findings.append(self._make(node, func, Severity.ERROR, context))
         return findings
 
-    def _make(self, node, func, sev, ctx):
+    def _make(self, node, func, sev, ctx, taint_path=None):
         return Finding(rule_id=self.id, message=f"Use of dangerous function '{func}'",
                        message_zh=f"使用了危险函数 '{func}'", file=str(ctx.file_path),
                        line=node.lineno or 0, severity=sev,
                        snippet=ctx.lines[node.lineno - 1].strip() if node.lineno else None,
-                       fix=f"Avoid '{func}()'. Use a safe alternative.")
+                       fix=f"Avoid '{func}()'. Use a safe alternative.",
+                       cwe=_FUNC_CWE.get(func), taint_path=taint_path)
 
 
 def _func_name(node):

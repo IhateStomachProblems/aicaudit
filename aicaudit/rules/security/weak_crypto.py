@@ -35,13 +35,15 @@ class WeakCrypto(Rule):
                         findings.append(Finding(
                             rule_id=self.id, message=f"Weak encryption mode: {node.attr}",
                             message_zh=f"弱加密模式：{node.attr}", file=str(context.file_path), line=node.lineno or 0, severity=self.severity,
-                            snippet=context.lines[node.lineno - 1].strip() if node.lineno else None))
+                            snippet=context.lines[node.lineno - 1].strip() if node.lineno else None,
+                            cwe="CWE-327"))
         return findings
 
     def _make(self, node, func, context):
         return Finding(rule_id=self.id, message=f"Weak crypto: {func}",
                        message_zh=f"弱加密算法：{func}", file=str(context.file_path),
-                       line=node.lineno or 0, severity=self.severity)
+                       line=node.lineno or 0, severity=self.severity,
+                       cwe="CWE-327")
 
 
 def _func_name(node):

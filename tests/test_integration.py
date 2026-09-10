@@ -19,7 +19,7 @@ def write_temp(code, suffix=".py"):
 
 def test_scan_default_markdown():
     path = write_temp(
-        "def foo():\n    exec('x = 1')\n    return x\n"
+        "def foo(cmd):\n    exec(cmd)\n    return 1\n"
     )
     runner = CliRunner()
     result = runner.invoke(main, ["scan", path])
@@ -44,7 +44,7 @@ def test_scan_json_output():
 
 def test_scan_zh_lang():
     path = write_temp(
-        "def foo():\n    import os\n    os.system('ls')\n"
+        "def foo(cmd):\n    import os\n    os.system(cmd)\n"
     )
     runner = CliRunner()
     result = runner.invoke(main, ["scan", path, "--lang", "zh"])

@@ -46,11 +46,16 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
         return []
 
     start = time.time()
-    all_findings = []
 
+    # Taint analysis pass: one AST per file, reused by the rules.
+    from aicaudit.taint.engine import TaintEngine
+    engine = TaintEngine()
+    taint_index = engine.analyze(files)
+
+    all_findings = []
     for file_path in files:
         all_findings.extend(
-            _scan_single_file(file_path, sel_rules, min_severity, lang)
+            _scan_single_file(file_path, sel_rules, min_severity, lang, taint_index)
         )
 
     elapsed = time.time() - start
@@ -137,19 +142,21 @@ def _print_summary(findings, file_count, elapsed, lang):
             print(f"  [{labels[sev].upper()}] {counts[sev]}", file=sys.stderr)
 
 
-def _scan_single_file(file_path, sel_rules, min_severity, lang):
+def _scan_single_file(file_path, sel_rules, min_severity, lang, taint_index=None):
     """Scan one file with all rules, applying severity filter and inline suppressions."""
+    tree = taint_index.tree_for(str(file_path)) if taint_index else None
     try:
         source = file_path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
         return []
-    try:
-        tree = ast.parse(source, filename=str(file_path))
-    except SyntaxError:
-        return []
-
+    if tree is None:
+        try:
+            tree = ast.parse(source, filename=str(file_path))
+        except SyntaxError:
+            return []
     lines = source.splitlines(keepends=False)
-    ctx = ScanContext(file_path=file_path, source=source, lines=lines, lang=lang)
+    ctx = ScanContext(file_path=file_path, source=source, lines=lines, lang=lang,
+                      taint=taint_index)
     suppress_map = _parse_suppressions(lines)
     findings = []
     for rule_cls in sel_rules:
