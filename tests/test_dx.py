@@ -1,7 +1,9 @@
 """DX features: CI exit codes, init wizard, external rule dirs, hook files."""
 from pathlib import Path
 
-import yaml
+import pytest
+
+yaml = pytest.importorskip("yaml", reason="pyyaml not installed")
 from click.testing import CliRunner
 
 from aicaudit.cli import main
