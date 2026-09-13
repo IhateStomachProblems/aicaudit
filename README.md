@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-290%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-305%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
@@ -62,7 +62,77 @@ aicaudit scan ./src --output sarif
 
 # Chinese language
 aicaudit scan ./src --lang zh
+
+# CI gate: exit 1 when any finding is error or worse (0 clean / 2 usage error)
+aicaudit scan ./src --fail-on error
 ```
+
+---
+
+## CI & Git Integration
+
+**One-line GitHub Action** (this repo ships a composite action at its root):
+
+```yaml
+- uses: IhateStomachProblems/aicaudit@main
+  with:
+    path: .
+    fail-on: error      # optional: fail the job at this severity
+    sarif: "true"       # optional: upload SARIF to Code Scanning
+```
+
+**pre-commit** (local hook until the PyPI release):
+
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: aicaudit
+        name: aicaudit
+        entry: aicaudit scan --fail-on error
+        language: system
+        types: [python]
+```
+
+**Project config** — generate it interactively:
+
+```bash
+aicaudit init            # writes [tool.aicaudit] into pyproject.toml
+```
+
+---
+
+## Custom Rules (Python files, no DSL)
+
+Drop rule files into `.aicaudit/rules/` (auto-discovered) or list extra dirs
+under `[tool.aicaudit] rule-dirs`. Rules are ordinary Python using the public
+API — a later registration with the same id overrides the builtin:
+
+```python
+# .aicaudit/rules/no_print.py
+import ast
+from aicaudit.rules.base import Finding, Rule, Severity, register
+
+@register
+class NoPrint(Rule):
+    id = "Q100"
+    name = "no-print"
+    severity = Severity.INFO
+    description = "Detect print() calls"
+
+    def check(self, tree, context):
+        return [Finding(rule_id=self.id, message="print() — prefer logging",
+                        message_zh="print()——建议改用 logging",
+                        file=str(context.file_path), line=n.lineno,
+                        severity=self.severity)
+                for n in ast.walk(tree)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "print"]
+```
+
+A ready-to-copy example lives at
+[examples/custom_rule_example.py](examples/custom_rule_example.py).
+(A declarative YAML rule format is planned for v0.3 — the loader is ready.)
 
 ---
 
@@ -207,7 +277,7 @@ python benchmarks/run.py
 
 ## Testing
 
-- 290 unit tests (pytest)
+- 305 unit tests (pytest)
 - 92% code coverage (pytest-cov)
 - Taint engine: 17 dedicated tests (sources, constness, sanitizers, interprocedural)
 - AI pipeline: fail-safe parsing, transport retry, category-aware prompts all tested
@@ -357,4 +427,4 @@ aicaudit scan ./src --output sarif > aicaudit.sarif
 
 ## 测试
 
-290 个单元测试，92% 代码覆盖率，污点引擎专项 17 测，AI 判定管线（fail-safe/重试/类别感知 prompt）全覆盖，Web UI 端点（SSE/pygments/修复回滚/会话持久化）集成测试，CLI/JSON/Markdown/SARIF/中文输出集成测试。
+305 个单元测试，92% 代码覆盖率：污点引擎专项、AI 判定管线（fail-safe/重试/类别感知 prompt）、Web UI（SSE/pygments/修复回滚/会话持久化）、CI 退出码/init 向导/外部规则目录、CLI/JSON/Markdown/SARIF/中文输出全覆盖。

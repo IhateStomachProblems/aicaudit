@@ -37,7 +37,7 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
     ``progress`` (optional) is called with (phase, current, total, detail):
     phase "taint" once for the dataflow pass, then phase "rules" per file.
     """
-    _import_all_rules()
+    _import_all_rules(base_root)
 
     # Determine which rules to run
     sel_rules = active_rules()
@@ -100,13 +100,46 @@ _RULE_MODULES = (
 )
 
 
-def _import_all_rules():
-    # Side-effect imports: loading a rule module registers its rule.
-    # importlib keeps these immune to unused-import lint fixes.
+def _import_all_rules(base_root=None):
+    """Register builtin rules, then external ones (project rule dirs).
+
+    External sources, relative to ``base_root`` when given:
+      - ``.aicaudit/rules/*.py`` (auto-discovered)
+      - dirs listed under ``[tool.aicaudit] rule-dirs`` in pyproject.toml
+    External rule files use the normal ``@register`` decorator; a rule id
+    registered later overrides an earlier one.
+    """
     import importlib
+    import importlib.util
+    from pathlib import Path as _Path
 
     for name in _RULE_MODULES:
         importlib.import_module(f"aicaudit.rules.{name}")
+
+    if base_root is None:
+        return
+    base_root = _Path(base_root)
+
+    dirs = [base_root / ".aicaudit" / "rules"]
+    try:
+        from aicaudit.config import load_pyproject
+        for entry in load_pyproject(base_root).get("rule-dirs") or []:
+            p = _Path(entry)
+            dirs.append(p if p.is_absolute() else base_root / p)
+    except Exception as exc:  # noqa: BLE001 — config problems must not kill scans
+        print(f"  rule-dirs config unreadable: {exc}", file=sys.stderr)
+
+    for rule_dir in dirs:
+        if not rule_dir.is_dir():
+            continue
+        for py in sorted(rule_dir.rglob("*.py")):
+            try:
+                spec = importlib.util.spec_from_file_location(
+                    f"aicaudit_ext_{py.stem}_{abs(hash(py)) & 0xffffff:x}", py)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+            except Exception as exc:  # noqa: BLE001 — one bad rule file must not kill the scan
+                print(f"  external rule {py.name} failed to load: {exc}", file=sys.stderr)
 
 
 def _parse_suppressions(lines):

@@ -41,7 +41,11 @@ def web(host, port, reload):
               help="Comma-separated rule IDs to run, e.g. --rules S001,Q001")
 @click.option("--min-severity", type=click.Choice(["info", "warning", "error", "critical"]),
               default=None, help="Minimum severity to report")
-def scan_cmd(paths, output, lang, ai, ai_strict, rules, min_severity):
+@click.option("--fail-on", "fail_on", type=click.Choice(["info", "warning", "error", "critical"]),
+              default=None,
+              help="CI gate: exit 1 when any finding is at or above this severity "
+                   "(exit 0 = clean, 1 = threshold exceeded, 2 = usage error)")
+def scan_cmd(paths, output, lang, ai, ai_strict, rules, min_severity, fail_on):
     """Scan Python files for code issues."""
     if not paths:
         paths = ["."]
@@ -68,6 +72,7 @@ def scan_cmd(paths, output, lang, ai, ai_strict, rules, min_severity):
 
     if not findings:
         click.echo("No issues found.", err=True)
+        _exit_code(findings, fail_on)
         return
 
     if output == "json":
@@ -77,7 +82,7 @@ def scan_cmd(paths, output, lang, ai, ai_strict, rules, min_severity):
     else:
         click.echo(dump_markdown(findings, lang=lang))
 
-    # AI mode: verify findings, then show fix preview
+    # AI mode: show fix previews (dry-run only)
     if ai:
         from aicaudit.fix import fix_file
         seen = set()
@@ -93,6 +98,20 @@ def scan_cmd(paths, output, lang, ai, ai_strict, rules, min_severity):
         click.echo("", err=True)
         click.echo("Fix previews above are dry-run only; nothing was written.", err=True)
 
+    _exit_code(findings, fail_on)
+
+
+def _exit_code(findings, fail_on):
+    """CI gate: exit 1 when findings reach the threshold (click ctx.exit)."""
+    if not fail_on:
+        return
+    rank = {"info": 0, "warning": 1, "error": 2, "critical": 3}
+    threshold = rank[fail_on]
+    exceeded = [f for f in findings if rank.get(f.severity.value, 0) >= threshold]
+    if exceeded:
+        click.echo(f"fail-on {fail_on}: {len(exceeded)} finding(s) at or above threshold", err=True)
+        click.get_current_context().exit(1)
+
 
 @main.command()
 def rules():
@@ -102,6 +121,73 @@ def rules():
     for cls in all_rules():
         r = cls()
         click.echo(f"  {r.id:6s}  {r.severity.value:8s}  {r.name}")
+
+
+@main.command()
+@click.option("--min-severity", type=click.Choice(["info", "warning", "error", "critical"]),
+              default=None, help="Minimum severity to report (skip the prompt)")
+@click.option("--ignore", default=None,
+              help="Comma-separated glob patterns to ignore (skip the prompt)")
+@click.option("--yes", "-y", is_flag=True, help="Accept defaults without prompting")
+def init_cmd(min_severity, ignore, yes):
+    """Create or update the [tool.aicaudit] section in pyproject.toml."""
+    root = find_project_root(Path.cwd())
+    pyproject = root / "pyproject.toml"
+
+    default_sev = "warning"
+    if min_severity:
+        sev = min_severity
+    elif yes:
+        sev = default_sev
+    else:
+        sev = click.prompt("Minimum severity to report", default=default_sev,
+                           type=click.Choice(["info", "warning", "error", "critical"]))
+
+    if ignore is not None:
+        ignores = [p.strip() for p in ignore.split(",") if p.strip()]
+    elif yes:
+        ignores = []
+    else:
+        raw = click.prompt("Ignore patterns (comma-separated globs, empty for none)", default="")
+        ignores = [p.strip() for p in raw.split(",") if p.strip()]
+
+    section = _render_aicaudit_section(sev, ignores)
+
+    if pyproject.exists():
+        text = pyproject.read_text(encoding="utf-8")
+        if "[tool.aicaudit]" in text:
+            text = _replace_section(text, section)
+            action = "updated"
+        else:
+            text = text.rstrip("\n") + "\n\n" + section
+            action = "updated"
+    else:
+        text = section
+        action = "created"
+    pyproject.write_text(text, encoding="utf-8")
+
+    click.echo(f"{action}: {pyproject}")
+    click.echo(section.rstrip())
+    click.echo("Custom rules: drop .py rule files into .aicaudit/rules/ "
+               "or set rule-dirs in the section above.", err=True)
+
+
+def _render_aicaudit_section(min_severity, ignores):
+    lines = ["[tool.aicaudit]", f'min-severity = "{min_severity}"']
+    if ignores:
+        joined = ", ".join(f'"{g}"' for g in ignores)
+        lines.append(f"ignore = [{joined}]")
+    lines.append('# rule-dirs = ["custom_rules"]   # extra dirs with Python rule files')
+    return "\n".join(lines) + "\n"
+
+
+def _replace_section(text, new_section):
+    """Replace an existing [tool.aicaudit] section (until the next [section])."""
+    import re
+    pattern = re.compile(r"\[tool\.aicaudit\][^\[]*", re.DOTALL)
+    if pattern.search(text):
+        return pattern.sub(new_section, text, count=1)
+    return text.rstrip("\n") + "\n\n" + new_section
 
 
 if __name__ == "__main__":

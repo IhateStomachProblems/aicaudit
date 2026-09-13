@@ -1,0 +1,58 @@
+name: "AICAudit"
+description: >-
+  Evidence-driven AI code audit for Python: taint-path findings, SARIF for
+  Code Scanning, optional AI verdicts. Fails the job when findings reach the
+  configured severity.
+branding:
+  icon: "shield"
+  color: "indigo"
+
+inputs:
+  path:
+    description: "Path(s) to scan (space separated)"
+    required: false
+    default: "."
+  fail-on:
+    description: "Exit 1 when findings are at or above this severity (info|warning|error|critical, empty = never fail)"
+    required: false
+    default: ""
+  sarif:
+    description: "Also upload SARIF to Code Scanning ('true'/'false')"
+    required: false
+    default: "false"
+  github-token:
+    description: "Token used for the SARIF upload"
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install AICAudit
+      shell: bash
+      run: pip install "${{ github.action_path }}"
+
+    - name: Run AICAudit
+      shell: bash
+      run: |
+        args=""
+        if [ -n "${{ inputs.fail-on }}" ]; then
+          args="--fail-on ${{ inputs.fail-on }}"
+        fi
+        if [ "${{ inputs.sarif }}" = "true" ]; then
+          aicaudit scan ${{ inputs.path }} $args --output sarif > aicaudit.sarif
+          cat aicaudit.sarif > /dev/null
+        else
+          aicaudit scan ${{ inputs.path }} $args
+        fi
+
+    - name: Upload SARIF
+      if: inputs.sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: aicaudit.sarif
+        token: ${{ inputs.github-token }}
