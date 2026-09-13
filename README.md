@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-281%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/tests-290%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
@@ -122,8 +122,18 @@ Prefer a browser over the terminal? Start the built-in web interface:
 aicaudit web          # http://127.0.0.1:8080
 ```
 
-Pages: Dashboard, Scan, Rules, AI Config. API docs at `/docs` (Swagger UI).
-The web UI is young — report anything that feels off.
+The UI is vendored and offline-first — no CDN, no build step, works air-gapped:
+
+- **Results browser**: code context with syntax highlighting (server-side
+  pygments), the **taint path as a visual stepper** (source → hops → sink),
+  AI verdict card with confidence, and diff-preview/apply/rollback for fixes
+- **Live scan progress**: per-file streaming (SSE), no fake progress bars
+- **Scan history**: sessions persist under `.aicaudit/web/`, dashboard shows
+  trends across runs
+- Rules browser and AI provider config (relay / OpenAI / Claude / OpenRouter /
+  local ollama)
+
+API docs at `/docs` (Swagger UI). Found something rough? [Open an issue](https://github.com/IhateStomachProblems/aicaudit/issues).
 
 ---
 
@@ -197,7 +207,7 @@ python benchmarks/run.py
 
 ## Testing
 
-- 281 unit tests (pytest)
+- 290 unit tests (pytest)
 - 92% code coverage (pytest-cov)
 - Taint engine: 17 dedicated tests (sources, constness, sanitizers, interprocedural)
 - AI pipeline: fail-safe parsing, transport retry, category-aware prompts all tested
@@ -347,4 +357,4 @@ aicaudit scan ./src --output sarif > aicaudit.sarif
 
 ## 测试
 
-281 个单元测试，92% 代码覆盖率，污点引擎专项 17 测，AI 判定管线（fail-safe/重试/类别感知 prompt）全覆盖，CLI/JSON/Markdown/SARIF/Web UI/中文输出集成测试。
+290 个单元测试，92% 代码覆盖率，污点引擎专项 17 测，AI 判定管线（fail-safe/重试/类别感知 prompt）全覆盖，Web UI 端点（SSE/pygments/修复回滚/会话持久化）集成测试，CLI/JSON/Markdown/SARIF/中文输出集成测试。

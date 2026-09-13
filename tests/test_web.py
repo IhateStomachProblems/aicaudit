@@ -1,4 +1,4 @@
-"""Web UI server tests: pages, scan API, export, fix, config."""
+"""Web UI server tests: pages, scan API, export, fix, config, SSE, persistence."""
 import os
 
 import pytest
@@ -18,12 +18,103 @@ def bad_file(tmp_path):
     return p
 
 
+@pytest.fixture
+def taint_file(tmp_path):
+    p = tmp_path / "vuln.py"
+    p.write_text(
+        "from flask import request\n"
+        "def view(conn):\n"
+        "    uid = request.args.get('id')\n"
+        "    conn.execute(f'SELECT * FROM t WHERE id={uid}')\n", encoding="utf-8")
+    return p
+
+
 def _scan(bad_file, lang="en"):
     resp = client.post("/api/scan", json={"paths": [str(bad_file)], "lang": lang})
     assert resp.status_code == 200
     data = resp.json()
     assert data["total"] >= 1
     return data["session_id"]
+
+
+class TestNewEndpoints:
+
+    def test_scan_carries_taint_path_and_cwe(self, taint_file):
+        sid = _scan(taint_file)
+        s = sessions[sid]
+        s001 = [f for f in s["findings"] if f["rule_id"] == "S001"]
+        assert s001, "S001 must fire on the vulnerable flask app"
+        f = s001[0]
+        assert f["cwe"] == "CWE-89"
+        assert f["taint_path"], "taint path must be serialized into the session"
+        assert f["taint_path"][0]["source"]["desc"].startswith("Flask request")
+
+    def test_sessions_listing(self, bad_file):
+        _scan(bad_file)
+        resp = client.get("/api/sessions")
+        assert resp.status_code == 200
+        items = resp.json()["sessions"]
+        assert any(s["total"] >= 1 for s in items)
+        first = items[0]
+        assert {"session_id", "timestamp", "total", "counts"}.issubset(first)
+
+    def test_file_content_pygments_window(self, taint_file):
+        resp = client.get("/api/file-content", params={"path": str(taint_file), "line": 4})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["target_line"] == 4
+        assert "html" in data and 'class="n">conn<' in data["html"]
+        assert 'class="hll"' in data["html"]      # target line emphasized
+
+    def test_file_content_missing_file_404(self):
+        resp = client.get("/api/file-content", params={"path": "nope.py", "line": 1})
+        assert resp.status_code == 404
+
+    def test_fix_preview_diff(self, tmp_path):
+        p = tmp_path / "fixable.py"
+        p.write_text("eval(user_input)\ny = 1\n", encoding="utf-8")
+        resp = client.post("/api/fix-preview", json={
+            "file": str(p), "rule_id": "S003", "line": 1, "fix": "# comment out",
+            "severity": "error", "message": "eval",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["changed"]
+        assert data["diff"] and "+#" in data["diff"]
+
+    def test_fix_rollback_restores(self, tmp_path):
+        p = tmp_path / "fixable.py"
+        original = "eval(user_input)\ny = 1\n"
+        p.write_text(original, encoding="utf-8")
+        apply = client.post("/api/apply-fix", json={
+            "file": str(p), "rule_id": "S003", "line": 1, "fix": "# x",
+            "severity": "error", "message": "eval",
+        }).json()
+        assert apply["backup"], "backup path must be returned"
+        assert "TODO" in p.read_text(encoding="utf-8")
+        rb = client.post("/api/fix-rollback", json={"backup": apply["backup"]})
+        assert rb.status_code == 200
+        assert p.read_text(encoding="utf-8") == original
+
+    def test_fix_rollback_rejects_non_bak(self):
+        resp = client.post("/api/fix-rollback", json={"backup": "important.py"})
+        assert resp.status_code == 400
+
+    def test_sse_scan_stream(self, bad_file):
+        with client.stream("GET", "/api/scan/stream",
+                           params={"paths": str(bad_file)}) as resp:
+            assert resp.status_code == 200
+            body = ""
+            for chunk in resp.iter_text():
+                body += chunk
+        assert '"type": "progress"' in body or '"type":"progress"' in body
+        assert '"type": "done"' in body or '"type":"done"' in body
+
+    def test_config_status(self, monkeypatch):
+        monkeypatch.delenv("AICAUDIT_AI_PROVIDER", raising=False)
+        resp = client.get("/api/config/status")
+        assert resp.status_code == 200
+        assert resp.json()["provider"] == "mock"
 
 
 class TestPages:

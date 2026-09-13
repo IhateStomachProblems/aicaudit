@@ -1,82 +1,48 @@
 {% extends "base.html" %}
+{% block title %}AI Config · AICAudit{% endblock %}
+{% block page %}config{% endblock %}
 {% block content %}
-<div class="p-6 max-w-3xl" x-data="configApp()">
-  <h1 class="text-2xl font-bold mb-6">Configuration</h1>
+  <h1 class="page-title">AI configuration</h1>
+  <p class="page-sub">
+    Verdicts are evidence-grounded and fail-safe: unparseable or low-confidence answers become
+    <span class="badge info">unverified</span>, never auto-confirmed.
+  </p>
 
-  <div class="space-y-4">
-    <!-- AI Provider -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-      <h3 class="text-sm font-medium mb-4">AI Provider</h3>
-      <div class="grid grid-cols-5 gap-2">
-        <template x-for="p in providers" :key="p.id">
-          <button @click="provider = p.id"
-            class="px-3 py-2 rounded-lg text-sm border transition text-center"
-            :class="provider === p.id ? 'bg-aicaudit-600/20 border-aicaudit-500 text-aicaudit-400' : 'bg-gray-950 border-gray-700 text-gray-400 hover:border-gray-600'">
-            <span x-text="p.label"></span>
-          </button>
-        </template>
+  <form id="config-form" class="card" style="max-width:640px">
+    <input type="hidden" id="provider" value="relay">
+    <div class="field">
+      <label>Provider</label>
+      <div class="chip-row">
+        <span class="chip on" data-provider="relay" title="Any OpenAI-compatible endpoint">relay / 中转</span>
+        <span class="chip" data-provider="openai">openai</span>
+        <span class="chip" data-provider="claude">claude</span>
+        <span class="chip" data-provider="openrouter">openrouter</span>
+        <span class="chip" data-provider="ollama" title="Local models, no key needed">ollama (local)</span>
+        <span class="chip" data-provider="mock">mock (off)</span>
       </div>
     </div>
-
-    <!-- API Config -->
-    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
-      <h3 class="text-sm font-medium mb-4">API Settings</h3>
-      <div class="space-y-3">
-        <div>
-          <label class="text-xs text-gray-400 block mb-1">API Key</label>
-          <input type="password" x-model="apiKey" placeholder="sk-..." class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-aicaudit-500 outline-none">
-        </div>
-        <div>
-          <label class="text-xs text-gray-400 block mb-1">Base URL</label>
-          <input type="text" x-model="apiBase" placeholder="https://api.openai.com/v1" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-aicaudit-500 outline-none">
-        </div>
-        <div>
-          <label class="text-xs text-gray-400 block mb-1">Model</label>
-          <input type="text" x-model="model" placeholder="gpt-4o-mini" class="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:border-aicaudit-500 outline-none">
-        </div>
-      </div>
-      <p class="text-xs text-gray-500 mt-3">Supports OpenAI, Claude, Ollama, and any OpenAI-compatible relay service.</p>
+    <div class="field">
+      <label for="ai_key">API key</label>
+      <input class="input" id="ai_key" placeholder="sk-…" autocomplete="off">
     </div>
+    <div class="field">
+      <label for="ai_base">Base URL (relay/ollama)</label>
+      <input class="input" id="ai_base" placeholder="https://your-relay.com/v1" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="ai_model">Model</label>
+      <input class="input" id="ai_model" placeholder="gpt-4o-mini / glm-5.2 / llama3.2" autocomplete="off">
+    </div>
+    <button class="btn primary" type="submit">Save configuration</button>
+  </form>
 
-    <!-- Save -->
-    <div class="flex items-center gap-3">
-      <button @click="saveConfig()" class="bg-aicaudit-600 hover:bg-aicaudit-500 px-5 py-2 rounded-lg text-sm font-medium transition">Save</button>
-      <span x-show="saved" class="text-emerald-400 text-sm">Configuration saved</span>
+  <div class="card mt" style="max-width:640px">
+    <div class="card-title">How verdicts work</div>
+    <div class="small muted" style="line-height:2">
+      The LLM sees the full enclosing function, the file's imports, and the engine-traced taint path.<br>
+      Injections get dataflow instructions; policy findings (secrets / weak crypto / random) get usage-context instructions.<br>
+      <span class="badge ok">confirmed</span> <span class="badge">false_positive</span> <span class="badge info">unverified</span>
+      — findings are marked, never silently deleted.
     </div>
   </div>
-</div>
-
-<script>
-function configApp() {
-  return {
-    providers: [
-      { id: "relay", label: "Relay" },
-      { id: "openai", label: "OpenAI" },
-      { id: "claude", label: "Claude" },
-      { id: "ollama", label: "Ollama" },
-      { id: "mock", label: "Offline" },
-    ],
-    provider: "{{ ai_cfg.provider }}",
-    apiKey: "",
-    apiBase: "{{ ai_cfg.api_base }}",
-    model: "{{ ai_cfg.model }}",
-    saved: false,
-
-    async saveConfig() {
-      const resp = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ai_provider: this.provider,
-          ai_key: this.apiKey,
-          ai_base: this.apiBase,
-          ai_model: this.model,
-        }),
-      });
-      this.saved = true;
-      setTimeout(() => this.saved = false, 2000);
-    }
-  }
-}
-</script>
 {% endblock %}

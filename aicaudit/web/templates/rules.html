@@ -1,37 +1,29 @@
 {% extends "base.html" %}
+{% block title %}Rules · AICAudit{% endblock %}
+{% block page %}rules{% endblock %}
 {% block content %}
-<div class="p-6 max-w-5xl">
-  <h1 class="text-2xl font-bold mb-6">Rules ({{ rules|length }})</h1>
+  <h1 class="page-title">Rules <span class="muted small">({{ rules|length }})</span></h1>
+  <p class="page-sub">Every security rule is taint-aware where it matters: provably-constant inputs don't fire; traced sources carry a full path.</p>
 
-  <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-    <table class="w-full text-sm">
+  <div class="card">
+    <input class="input" id="rule-search" placeholder="Filter rules…" autocomplete="off">
+  </div>
+
+  <div class="card mt">
+    <table class="tbl">
       <thead>
-        <tr class="bg-gray-950/50">
-          <th class="text-left px-4 py-3 text-gray-400 font-medium">ID</th>
-          <th class="text-left px-4 py-3 text-gray-400 font-medium">Name</th>
-          <th class="text-left px-4 py-3 text-gray-400 font-medium">Severity</th>
-          <th class="text-left px-4 py-3 text-gray-400 font-medium">Description</th>
-        </tr>
+        <tr><th>ID</th><th>Name</th><th>Severity</th><th>Description</th></tr>
       </thead>
       <tbody>
-        {% for rule in rules %}
-        <tr class="border-t border-gray-800 hover:bg-gray-800/30">
-          <td class="px-4 py-3">
-            <span class="font-mono text-aicaudit-400">{{ rule.id }}</span>
-          </td>
-          <td class="px-4 py-3">{{ rule.name }}</td>
-          <td class="px-4 py-3">
-            <span class="text-xs px-2 py-0.5 rounded-full {%
-              if rule.severity == 'critical' %}bg-red-500/10 text-red-400{%
-              elif rule.severity == 'error' %}bg-orange-500/10 text-orange-400{%
-              elif rule.severity == 'warning' %}bg-yellow-500/10 text-yellow-400{%
-              else %}bg-blue-500/10 text-blue-400{% endif %}">{{ rule.severity }}</span>
-          </td>
-          <td class="px-4 py-3 text-gray-400 text-xs">{{ rule.description }}</td>
+        {% for r in rules %}
+        <tr data-rule-row="{{ r.id }} {{ r.name }} {{ r.description }}">
+          <td class="mono"><span class="badge brand">{{ r.id }}</span></td>
+          <td class="mono">{{ r.name }}</td>
+          <td><span class="badge {{ r.severity }}">{{ r.severity }}</span></td>
+          <td class="muted">{{ r.description }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-</div>
 {% endblock %}

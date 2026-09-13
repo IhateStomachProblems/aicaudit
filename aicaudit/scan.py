@@ -31,8 +31,12 @@ def _is_ignored(path, patterns, base_root):
     return matches_ignore(path, patterns, base_root)
 
 
-def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, base_root=None, ai_verify=False):
-    """Scan Python files. Returns findings filtered by rules and severity."""
+def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, base_root=None, ai_verify=False, progress=None):
+    """Scan Python files. Returns findings filtered by rules and severity.
+
+    ``progress`` (optional) is called with (phase, current, total, detail):
+    phase "taint" once for the dataflow pass, then phase "rules" per file.
+    """
     _import_all_rules()
 
     # Determine which rules to run
@@ -50,10 +54,16 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
     # Taint analysis pass: one AST per file, reused by the rules.
     from aicaudit.taint.engine import TaintEngine
     engine = TaintEngine()
+    if progress:
+        progress("taint", 0, len(files), "tracing dataflow")
     taint_index = engine.analyze(files)
+    if progress:
+        progress("taint", len(files), len(files), "dataflow done")
 
     all_findings = []
-    for file_path in files:
+    for i, file_path in enumerate(files):
+        if progress:
+            progress("rules", i, len(files), str(file_path))
         all_findings.extend(
             _scan_single_file(file_path, sel_rules, min_severity, lang, taint_index)
         )
