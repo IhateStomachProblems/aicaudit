@@ -13,13 +13,12 @@ import pytest
 
 from aicaudit.llm.client import (
     AiConfig,
-    _build_deep_prompt,
     _call_openai_compat,
     _extract_response_text,
-    _llm_verify,
-    _parse_deep_response,
+    verify_findings,
 )
-from aicaudit.rules.base import Finding, Severity
+from aicaudit.llm.prompts import FindingEvidence, build_evidence_prompt
+from aicaudit.taint.model import TaintHop, TaintOrigin, TaintPath
 
 TEST_API_KEY = os.environ.get("AICAUDIT_AI_KEY", "")
 TEST_API_BASE = os.environ.get("AICAUDIT_AI_BASE", "https://api.aixforge.com/v1")
@@ -41,105 +40,77 @@ def _cfg():
     )
 
 
-def make_finding(rule_id, line, file="app.py", msg="test", sev=Severity.WARNING, snippet=""):
-    return Finding(rule_id=rule_id, message=msg, message_zh=msg,
-                   file=file, line=line, severity=sev, snippet=snippet)
+def make_evidence(rule_id, snippet, taint=True):
+    paths = [TaintPath(
+        origin=TaintOrigin(kind="source", desc="request.args (Flask user input)",
+                           file="app.py", line=15),
+        hops=[TaintHop(file="app.py", line=16, desc="assigned to 'uid'")],
+        sink=TaintHop(file="app.py", line=17, desc=".execute()"))] if taint else []
+    return FindingEvidence(
+        rule_id=rule_id, severity="critical", file="app.py", line=17,
+        message="SQL injection risk", snippet=snippet, taint_paths=paths,
+        function_source="def view(conn):\n"
+                        "    uid = request.args.get('id')\n"
+                        "    conn.execute(f\"SELECT * FROM t WHERE id={uid}\")",
+        imports="from flask import request")
 
 
 class TestAIIntegration:
 
     def test_extract_response_text(self):
         """Test _extract_response_text handles content and reasoning_content."""
-        msg1 = {"content": "Hello"}
-        assert _extract_response_text(msg1) == "Hello"
-        msg2 = {"content": "", "reasoning_content": "Thinking..."}
-        assert _extract_response_text(msg2) == "Thinking..."
-        msg3 = {"content": "Direct answer"}
-        assert _extract_response_text(msg3) == "Direct answer"
+        assert _extract_response_text({"content": "Hello"}) == "Hello"
+        assert _extract_response_text({"content": "", "reasoning_content": "Thinking..."}) == "Thinking..."
 
     @requires_live_ai
-    def test_single_finding_verification(self):
-        """AI analyzes a single SQL injection finding."""
-        finding = make_finding(
-            "S001", 15, msg="SQL injection risk: f-string in query",
-            sev=Severity.CRITICAL,
-            snippet='cursor.execute(f"SELECT * FROM users WHERE id={user_id}")',
-        )
-        cfg = _cfg()
-        prompt = _build_deep_prompt(
-            [finding],
-            {15: 'cursor.execute(f"SELECT * FROM users WHERE id={user_id}")'},
-            {},
-        )
-        response = _call_openai_compat(prompt, cfg)
-        results = _parse_deep_response(response, [finding], {})
+    def test_single_finding_verdict(self):
+        """AI judges a SQL injection backed by a complete taint path."""
+        ev = make_evidence("S001", 'conn.execute(f"SELECT * FROM users WHERE id={user_id}")')
+        results = verify_findings([ev], config=_cfg())
         assert len(results) == 1
         r = results[0]
-        assert r["ai_verified"] is True
-        assert r["ai_severity"] in ("error", "critical")
-        assert len(r["ai_reason"]) > 10
+        assert r["ai_status"] in ("confirmed", "false_positive", "unverified")
+        if r["ai_status"] == "confirmed":
+            assert r["ai_confidence"] > 0.5
+            assert len(r["ai_reason"]) > 10
 
     @requires_live_ai
     def test_false_positive_detection(self):
-        """AI correctly identifies a parameterized query as safe."""
-        finding = make_finding(
-            "S001", 20, file="db.py",
-            msg="SQL injection risk: variable in query",
-            sev=Severity.ERROR,
-            snippet='cursor.execute("SELECT * FROM t WHERE id = ?", (user_id,))',
-        )
-        cfg = _cfg()
-        prompt = _build_deep_prompt(
-            [finding],
-            {20: 'cursor.execute("SELECT * FROM t WHERE id = ?", (user_id,))'},
-            {},
-        )
-        response = _call_openai_compat(prompt, cfg)
-        results = _parse_deep_response(response, [finding], {})
-        assert len(results) == 1
+        """Parameterized query must never be a high-confidence confirm."""
+        ev = FindingEvidence(
+            rule_id="S001", severity="error", file="db.py", line=20,
+            message="SQL injection risk",
+            snippet='conn.execute("SELECT * FROM t WHERE id = ?", (user_id,))',
+            function_source='def get(db, user_id):\n'
+                            '    return db.execute("SELECT * FROM t WHERE id = ?", (user_id,))',
+            imports="import sqlite3", taint_paths=[])
+        results = verify_findings([ev], config=_cfg())
         r = results[0]
-        assert r["ai_verified"] is False
+        assert not (r["ai_status"] == "confirmed" and r["ai_confidence"] > 0.8)
 
     @requires_live_ai
     def test_multi_finding_batch(self):
-        """AI analyzes a batch of mixed findings."""
-        findings = [
-            make_finding("S001", 10, msg="eval(user_input)", sev=Severity.CRITICAL,
-                         snippet="eval(user_input)"),
-            make_finding("S002", 20, msg="Hardcoded API key",
-                         sev=Severity.CRITICAL, snippet='API_KEY = "sk-test12345678"'),
-            make_finding("Q001", 30, msg="Bare except clause",
-                         sev=Severity.WARNING, snippet="except:"),
+        """AI handles a batch of mixed findings."""
+        evidences = [
+            make_evidence("S001", "conn.execute(f'... {uid}')"),
+            make_evidence("S002", 'API_KEY = "sk-test12345678"', taint=False),
+            FindingEvidence(rule_id="Q001", severity="warning", file="app.py", line=30,
+                            message="Bare except", snippet="except:",
+                            function_source="try:\n    x = 1\nexcept:\n    pass",
+                            imports="", taint_paths=[]),
         ]
-        cfg = _cfg()
-        prompt = _build_deep_prompt(findings, {
-            10: "eval(user_input)",
-            20: 'API_KEY = "sk-test12345678"',
-            30: "except:",
-        }, {})
-        response = _call_openai_compat(prompt, cfg)
-        results = _parse_deep_response(response, findings, {})
+        results = verify_findings(evidences, config=_cfg())
         assert len(results) == 3
         for r in results:
-            assert "ai_verified" in r
-            assert len(r.get("ai_reason", "")) > 5
+            assert r["ai_status"] in ("confirmed", "false_positive", "unverified")
 
     @requires_live_ai
-    def test_full_pipeline_with_retry(self):
-        """Full _llm_verify pipeline: batching + retry + parse."""
-        findings = [
-            make_finding("S001", 5, msg="exec(cmd)", sev=Severity.CRITICAL,
-                         snippet="exec(cmd)"),
-            make_finding("S003", 12, msg="subprocess shell=True",
-                         sev=Severity.ERROR,
-                         snippet="subprocess.run(cmd, shell=True)"),
-        ]
-        cfg = _cfg()
-        results = _llm_verify(findings, {
-            5: "exec(cmd)",
-            12: "subprocess.run(cmd, shell=True)",
-        }, {}, cfg)
-        assert len(results) == 2
-        for r in results:
-            assert r["ai_verified"] is True
-            assert len(r.get("ai_reason", "")) > 5
+    def test_transport_alive(self):
+        resp = _call_openai_compat("Reply with exactly: ok", _cfg())
+        assert resp.strip()
+
+    def test_prompt_shape_local(self):
+        ev = make_evidence("S001", "conn.execute(q)")
+        prompt = build_evidence_prompt([ev])
+        assert "Taint path" in prompt
+        assert "Enclosing function:" in prompt

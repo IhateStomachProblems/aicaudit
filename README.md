@@ -6,8 +6,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-259%20passed-brightgreen" alt="Tests"/>
-  <img src="https://img.shields.io/badge/coverage-90%25-brightgreen" alt="Coverage"/>
+  <img src="https://img.shields.io/badge/tests-281%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
   <img src="https://img.shields.io/badge/SARIF-2.1-blue" alt="SARIF"/>
@@ -197,12 +197,45 @@ python benchmarks/run.py
 
 ## Testing
 
-- 259 unit tests (pytest)
-- 90% code coverage (pytest-cov)
+- 281 unit tests (pytest)
+- 92% code coverage (pytest-cov)
 - Taint engine: 17 dedicated tests (sources, constness, sanitizers, interprocedural)
+- AI pipeline: fail-safe parsing, transport retry, category-aware prompts all tested
 - Integration tests for CLI, JSON, Markdown, SARIF, Web UI, Chinese output
 - Self-scan validation: we audit our own codebase
 - CI: GitHub Actions on Python 3.10–3.13 (ruff + mypy + coverage + self-scan)
+
+---
+
+## AI Verdicts (evidence-grounded, fail-safe)
+
+`aicaudit scan ./src --ai` attaches a verdict to every finding. The LLM sees
+the full enclosing function, the file's imports, and the engine-traced taint
+path — not a one-line snippet — and answers with a structured verdict
+(`is_real`, `confidence`, `cwe`, `reason`, `suggested_fix`).
+
+Three verdict states, by design:
+
+| status | meaning |
+|--------|---------|
+| `confirmed` | AI agrees it is real, confidence ≥ 0.5 |
+| `false_positive` | AI judged it noise (reason always included) |
+| `unverified` | missing/failed/low-confidence response — **never** auto-confirmed |
+
+Why not auto-filter? The best published LLM-verifier configurations still
+wrongly suppress ~22% of true vulnerabilities ([arXiv 2601.22952](https://arxiv.org/abs/2601.22952)),
+so verdicts mark findings instead of deleting them. If you want aggressive
+filtering anyway, it is an explicit opt-in:
+
+```bash
+aicaudit scan ./src --ai --ai-strict    # keep only AI-confirmed findings
+```
+
+Prompts are category-aware: injection-class findings (S001/S003/S004/S005/S007)
+get dataflow verification instructions anchored on the taint path;
+policy-class findings (S002/S006/S008) get usage-context instructions —
+targeting the documented failure modes of LLM verifiers (surface pattern
+matching, CWE mislabeling, crypto/policy dismissals).
 
 ---
 
@@ -314,4 +347,4 @@ aicaudit scan ./src --output sarif > aicaudit.sarif
 
 ## 测试
 
-259 个单元测试，90% 代码覆盖率，污点引擎专项测试 17 个，CLI/JSON/Markdown/SARIF/Web UI/中文输出集成测试。
+281 个单元测试，92% 代码覆盖率，污点引擎专项 17 测，AI 判定管线（fail-safe/重试/类别感知 prompt）全覆盖，CLI/JSON/Markdown/SARIF/Web UI/中文输出集成测试。

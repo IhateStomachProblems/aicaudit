@@ -1,90 +1,89 @@
-"""Tests for AI verification module."""
+"""scan --ai integration: verdicts mark findings, never silently delete."""
+from click.testing import CliRunner
 
-import json
-
-from aicaudit.llm.client import (
-    _mock_verify,
-    _parse_deep_response,
-    filter_verified,
-    verify_findings,
-)
-from aicaudit.rules.base import Finding, Severity
+from aicaudit.cli import main
+from aicaudit.output.json_output import dump_json
+from aicaudit.scan import scan
 
 
-def make_finding(rule_id="S001", line=1, snippet="x = 1", msg="test"):
-    return Finding(
-        rule_id=rule_id, message=msg, message_zh=msg + "zh",
-        file="test.py", line=line, severity=Severity.WARNING,
-        snippet=snippet,
-    )
+def _write_vuln(tmp_path):
+    p = tmp_path / "app.py"
+    p.write_text(
+        "from flask import request\n"
+        "def view(conn):\n"
+        "    uid = request.args.get('id')\n"
+        "    conn.execute(f'SELECT * FROM t WHERE id={uid}')\n", encoding="utf-8")
+    return p
 
 
-def test_mock_verify_returns_all():
-    findings = [make_finding()]
-    result = _mock_verify(findings)
-    assert len(result) == 1
-    assert result[0]["ai_verified"] == True
+def test_ai_marks_without_deleting(tmp_path, monkeypatch):
+    """Mock provider (no LLM) -> every finding stays, marked unverified."""
+    monkeypatch.delenv("AICAUDIT_AI_PROVIDER", raising=False)
+    findings = scan([_write_vuln(tmp_path)], ai_verify=True)
+    assert len(findings) >= 1
+    for f in findings:
+        if f.ai is not None:
+            assert f.ai["ai_status"] == "unverified"
 
 
-def test_mock_verify_preserves_fields():
-    findings = [make_finding(rule_id="S001", line=5, snippet="exec('x')")]
-    result = _mock_verify(findings)
-    assert result[0]["rule_id"] == "S001"
-    assert result[0]["line"] == 5
-    assert result[0]["snippet"] == "exec('x')"
+def test_ai_attaches_verdict_fields(tmp_path, monkeypatch):
+    from unittest import mock
+
+    monkeypatch.setenv("AICAUDIT_AI_PROVIDER", "openai")
+    monkeypatch.setenv("AICAUDIT_AI_KEY", "sk-test")
+
+    def fake_verify(evidences, config=None):
+        out = []
+        for i, ev in enumerate(evidences):
+            out.append({
+                "rule_id": ev.rule_id, "message": ev.message, "file": ev.file,
+                "line": ev.line, "severity": ev.severity, "snippet": ev.snippet,
+                "fix": ev.fix,
+                "ai_status": "confirmed" if i == 0 else "unverified",
+                "ai_confidence": 0.9, "ai_reason": "taint path confirms",
+                "ai_severity": ev.severity, "ai_cwe": ev.cwe or "",
+                "ai_vuln_type": "sql-injection",
+                "ai_suggested_fix": "parameterize", "evidence_used": [],
+            })
+        return out
+
+    with mock.patch("aicaudit.llm.client.verify_findings", side_effect=fake_verify):
+        findings = scan([_write_vuln(tmp_path)], ai_verify=True)
+    assert findings, "findings must survive AI verification"
+    with_ai = [f for f in findings if f.ai]
+    assert with_ai, "verdicts must be attached"
+    assert any(f.ai["ai_status"] == "confirmed" for f in with_ai)
 
 
-def test_filter_verified_keeps_real():
-    items = [
-        {"rule_id": "S001", "ai_verified": True},
-        {"rule_id": "S002", "ai_verified": False},
-    ]
-    result = filter_verified(items)
-    assert len(result) == 1
-    assert result[0]["rule_id"] == "S001"
+def test_ai_strict_cli_filters_everything_unverified(tmp_path, monkeypatch):
+    monkeypatch.delenv("AICAUDIT_AI_PROVIDER", raising=False)
+    p = _write_vuln(tmp_path)
+    result = CliRunner().invoke(main, ["scan", str(p), "--ai", "--ai-strict"])
+    out = result.output + getattr(result, "stderr", "")
+    assert "--ai-strict" in out          # filter summary printed
+    assert "No issues found" in out      # mock -> all unverified -> empty
 
 
-def test_parse_deep_response_valid_json():
-    findings = [make_finding()]
-    response = json.dumps([{"index": 0, "is_real": True, "reason": "Looks valid"}])
-    result = _parse_deep_response(response, findings, {})
-    assert result[0]["ai_verified"] == True
-    assert result[0]["ai_reason"] == "Looks valid"
-
-
-def test_parse_deep_response_false_positive():
-    findings = [make_finding()]
-    response = json.dumps([{"index": 0, "is_real": False, "reason": "Safe input"}])
-    result = _parse_deep_response(response, findings, {})
-    assert result[0]["ai_verified"] == False
-
-
-def test_parse_deep_response_fallback_on_bad_json():
-    findings = [make_finding()]
-    response = "not json at all"
-    result = _parse_deep_response(response, findings, {})
-    assert result[0]["ai_verified"] == True
-    assert "Fallback" in result[0]["ai_reason"]
-
-
-def test_verify_findings_with_mock_default():
-    findings = [make_finding()]
-    result = verify_findings(findings, {1: 'x = 1'})
-    assert len(result) == 1
-
-
-def test_ai_flag_works_on_cli():
+def test_ai_flag_accepted():
     import os
     import tempfile
-
-    from click.testing import CliRunner
-
-    from aicaudit.cli import main
     with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False, encoding='utf-8') as f:
-        f.write("exec('x')\n")
+        f.write("def f(cmd):\n    exec(cmd)\n")
         fname = f.name
     try:
         r = CliRunner().invoke(main, ["scan", fname, "--ai"])
         assert r.exit_code == 0
     finally:
         os.unlink(fname)
+
+
+def test_json_output_carries_ai_verdict(tmp_path):
+    import json
+    findings = scan([_write_vuln(tmp_path)])
+    assert findings
+    findings[0].ai = {"ai_status": "false_positive", "ai_confidence": 0.8,
+                      "ai_reason": "sanitized upstream", "ai_severity": None,
+                      "ai_cwe": "", "ai_suggested_fix": ""}
+    data = json.loads(dump_json(findings))
+    assert data["findings"][0]["ai"]["status"] == "false_positive"
+    assert data["findings"][0]["ai"]["confidence"] == 0.8

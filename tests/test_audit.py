@@ -24,7 +24,7 @@ def test_audit_basic_no_ai():
             "    app.run()\n", encoding="utf-8")
         report = run_audit([str(d)], lang="en", use_ai=False)
         assert report["scan"]["findings"] >= 1
-        assert report["scan"]["evidence_chains_traced"] >= 1
+        assert report["scan"]["taint_paths_traced"] >= 1
         assert report["ai"]["provider"] == "disabled"
 
 

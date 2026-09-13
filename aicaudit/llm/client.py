@@ -1,11 +1,27 @@
-"""LLM client: multi-provider AI verification with evidence-chain context."""
+"""LLM client: evidence-grounded AI verdicts with fail-safe semantics.
 
+Verdict lifecycle: every finding gets a three-state verdict —
+  confirmed       AI judged it a genuine vulnerability (confidence >= threshold)
+  false_positive  AI judged it noise
+  unverified      AI missing/error/parse-failure/low-confidence — NEVER auto-
+                  confirmed (the old fail-open behavior silently suppressed
+                  nothing but also rubber-stamped everything; both directions
+                  were wrong).
+Suppressing findings is an explicit opt-in (`--ai-strict`), because the best
+reported LLM-verifier configurations still wrongly suppress ~22% of true
+positives (arXiv 2601.22952).
+"""
 from __future__ import annotations
 
 import json
 import os
 import time
 from dataclasses import dataclass
+
+from aicaudit.llm.prompts import FindingEvidence, build_evidence_prompt
+
+CONFIDENCE_THRESHOLD = 0.5
+BATCH_SIZE = 10
 
 
 @dataclass
@@ -42,46 +58,126 @@ def load_ai_config() -> AiConfig:
     return cfg
 
 
-def verify_findings(findings, code_snippets, evidence_chains=None, config=None):
+# ── public API ───────────────────────────────────────────────────────────────
+
+def verify_findings(evidences: list[FindingEvidence], config: AiConfig | None = None) -> list[dict]:
+    """Verify findings against their evidence. Returns one verdict dict each."""
     cfg = config or load_ai_config()
     if cfg.provider == "mock":
-        return _mock_verify(findings)
-    return _llm_verify(findings, code_snippets, evidence_chains, cfg)
+        return [_unverified(f, "no AI provider configured") for f in evidences]
+    if not cfg.api_key and cfg.provider != "ollama":
+        return [_unverified(f, "no API key configured") for f in evidences]
+    return _llm_verify(evidences, cfg)
 
 
-def _mock_verify(findings):
-    return [_mark_verified(f) for f in findings]
+def filter_confirmed(verdicts: list[dict]) -> list[dict]:
+    """Strict mode: keep only AI-confirmed findings."""
+    return [v for v in verdicts if v.get("ai_status") == "confirmed"]
 
 
-def _mark_verified(f, reason="Mock AI: pass-through (no LLM configured)"):
-    d = _finding_to_dict(f)
-    d["ai_verified"] = True
-    d["ai_reason"] = reason
-    d["ai_severity"] = d["severity"]
-    d["ai_vuln_type"] = ""
-    d["ai_suggested_fix"] = d.get("fix", "")
-    d["evidence_used"] = []
+def verdict_status(v: dict) -> str:
+    return v.get("ai_status", "unverified")
+
+
+# ── internals ────────────────────────────────────────────────────────────────
+
+def _base_dict(ev: FindingEvidence) -> dict:
+    return {"rule_id": ev.rule_id, "message": ev.message, "file": ev.file,
+            "line": ev.line, "severity": ev.severity, "snippet": ev.snippet,
+            "fix": ev.fix, "cwe": ev.cwe}
+
+
+def _unverified(ev: FindingEvidence, reason: str) -> dict:
+    d = _base_dict(ev)
+    d.update({"ai_status": "unverified", "ai_confidence": 0.0, "ai_reason": reason,
+              "ai_severity": ev.severity, "ai_cwe": ev.cwe or "",
+              "ai_vuln_type": "", "ai_suggested_fix": "",
+              "evidence_used": [p.render() for p in ev.taint_paths]})
     return d
 
 
-def _finding_to_dict(f):
-    return {"rule_id": f.rule_id, "message": f.message, "file": f.file,
-            "line": f.line, "severity": f.severity.value,
-            "snippet": f.snippet, "fix": f.fix}
-
-
-def _llm_verify(findings, code_snippets, evidence_chains, cfg):
-    if not cfg.api_key and cfg.provider not in ("ollama",):
-        return _mock_verify(findings)
-    batch_size = 10
-    all_results = []
-    for start in range(0, len(findings), batch_size):
-        batch = findings[start:start + batch_size]
-        prompt = _build_deep_prompt(batch, code_snippets, evidence_chains, start)
+def _llm_verify(evidences: list[FindingEvidence], cfg: AiConfig) -> list[dict]:
+    all_results: list[dict] = []
+    for start in range(0, len(evidences), BATCH_SIZE):
+        batch = evidences[start:start + BATCH_SIZE]
+        prompt = build_evidence_prompt(batch, offset=start)
         response = _call_llm_with_retry(prompt, cfg, retries=2)
-        batch_results = _parse_deep_response(response, batch, evidence_chains)
-        all_results.extend(batch_results)
+        all_results.extend(_parse_verdicts(response, batch, offset=start))
     return all_results
+
+
+def _parse_verdicts(response_text: str, batch: list[FindingEvidence],
+                    offset: int = 0) -> list[dict]:
+    """Fail-safe: anything the LLM did not clearly judge becomes unverified."""
+    verdicts = _extract_json_array(response_text)
+    if verdicts is None:
+        return [_unverified(f, "AI response unparseable — marked unverified") for f in batch]
+
+    vmap: dict[int, dict] = {}
+    for v in verdicts:
+        if isinstance(v, dict) and isinstance(v.get("index"), int):
+            vmap[v["index"]] = v
+
+    results: list[dict] = []
+    for i, f in enumerate(batch):
+        # candidates: batch-relative index, then the absolute index (some
+        # models echo the prompt's global numbering)
+        v = vmap.get(i) or vmap.get(i + offset)
+        if v is None:
+            results.append(_unverified(f, f"no verdict returned for index {i}"))
+            continue
+        d = _base_dict(f)
+        d["evidence_used"] = [p.render() for p in f.taint_paths]
+
+        if "is_real" not in v:
+            results.append(_unverified(f, "verdict missing is_real — marked unverified"))
+            continue
+        try:
+            confidence = float(v.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+
+        is_real = bool(v["is_real"])
+        status = "confirmed" if is_real else "false_positive"
+        reason = str(v.get("reason", "")).strip()
+        if status == "confirmed" and confidence < CONFIDENCE_THRESHOLD:
+            status = "unverified"
+            reason = (reason + " — ").lstrip() + f"confidence {confidence:.2f} below threshold {CONFIDENCE_THRESHOLD}"
+        d.update({
+            "ai_status": status,
+            "ai_confidence": round(confidence, 2),
+            "ai_reason": reason or "(no reason given)",
+            "ai_severity": v.get("severity", f.severity),
+            "ai_cwe": v.get("cwe", f.cwe or ""),
+            "ai_vuln_type": v.get("vuln_type", ""),
+            "ai_suggested_fix": v.get("suggested_fix", ""),
+        })
+        results.append(d)
+    return results
+
+
+def _extract_json_array(text: str) -> list | None:
+    """Parse the LLM response as a JSON array, tolerating code fences."""
+    if not text:
+        return None
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        cleaned = cleaned.removeprefix("json")
+        cleaned = cleaned.strip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("[")
+        end = cleaned.rfind("]")
+        if start == -1 or end <= start:
+            return None
+        try:
+            parsed = json.loads(cleaned[start:end + 1])
+        except json.JSONDecodeError:
+            return None
+    return parsed if isinstance(parsed, list) else None
 
 
 def _call_llm_with_retry(prompt, cfg, retries=2):
@@ -94,42 +190,6 @@ def _call_llm_with_retry(prompt, cfg, retries=2):
             if attempt < retries:
                 time.sleep(1 * (attempt + 1))
     return json.dumps({"error": "LLM call failed after " + str(retries + 1) + " attempts: " + str(last_error)})
-
-
-def _build_deep_prompt(findings, code_snippets, evidence_chains, offset=0):
-    parts = [
-        "You are a senior security code reviewer. Analyze each finding and respond",
-        "with a JSON array of objects. Each object MUST have these fields:\n",
-        "- index: integer (the finding number, starting from " + str(offset) + ")\n",
-        "- is_real: boolean (true = genuine vulnerability, false = false positive)\n",
-        "- severity: string (info, warning, error, critical)\n",
-        "- vuln_type: string (e.g. SQL-injection, secret-leak, command-injection)\n",
-        "- suggested_fix: string (concise fix advice, 2-3 sentences)\n",
-        "- reason: string (why you decided this, 1-2 sentences)\n",
-        "\nRespond ONLY with the JSON array, no other text.\n\n",
-    ]
-    for i, f in enumerate(findings):
-        idx = offset + i
-        parts.append("=== Finding [" + str(idx) + "] ===\n")
-        parts.append("Rule: " + f.rule_id + " | Static severity: " + f.severity.value + "\n")
-        parts.append("Message: " + f.message + "\n")
-        parts.append("File: " + f.file + ":" + str(f.line) + "\n")
-        parts.append("Code: " + str(code_snippets.get(f.line, "")) + "\n")
-        key = f.rule_id + ":" + f.file + ":" + str(f.line)
-        chains = (evidence_chains or {}).get(key, [])
-        if chains:
-            parts.append("Evidence chain (" + str(len(chains)) + " paths):\n")
-            for c in chains[:2]:
-                entries = " -> ".join(
-                    str(fp) + ":" + str(ln) + "(" + str(fn) + ")"
-                    for fp, ln, fn in c.path
-                )
-                parts.append(
-                    "  Entry: " + c.entry + " | Path: " + entries
-                    + " | Sink: " + c.sink + " | Risk: " + c.risk + "\n"
-                )
-        parts.append("\n")
-    return "".join(parts)
 
 
 def _call_llm(prompt, cfg):
@@ -187,38 +247,3 @@ def _call_claude(prompt, cfg):
         messages=[{"role": "user", "content": prompt}],
     )
     return msg.content[0].text
-
-
-def _parse_deep_response(response_text, findings, evidence_chains):
-    results = []
-    try:
-        verdicts = json.loads(response_text)
-        if isinstance(verdicts, list):
-            vmap = {}
-            for v in verdicts:
-                if isinstance(v, dict) and "index" in v:
-                    vmap[v["index"]] = v
-            for i, f in enumerate(findings):
-                if i in vmap:
-                    v = vmap[i]
-                    d = _finding_to_dict(f)
-                    d["ai_verified"] = v.get("is_real", True)
-                    d["ai_reason"] = v.get("reason", "")
-                    d["ai_severity"] = v.get("severity", d["severity"])
-                    d["ai_vuln_type"] = v.get("vuln_type", "")
-                    d["ai_suggested_fix"] = v.get("suggested_fix", "")
-                    key = f.rule_id + ":" + f.file + ":" + str(f.line)
-                    d["evidence_used"] = (evidence_chains or {}).get(key, [])
-                    results.append(d)
-                else:
-                    results.append(
-                        _mark_verified(f, "No verdict from AI for index " + str(i))
-                    )
-            return results
-    except (json.JSONDecodeError, TypeError, ValueError):
-        pass
-    return [_mark_verified(f, "Fallback: AI response parsing failed") for f in findings]
-
-
-def filter_verified(items):
-    return [f for f in items if f.get("ai_verified", True)]

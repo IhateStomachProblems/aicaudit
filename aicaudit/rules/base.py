@@ -32,6 +32,7 @@ class Finding:
     fix: str | None = None
     cwe: str | None = None                          # e.g. "CWE-89"
     taint_path: list[TaintPath] | None = None       # source -> ... -> sink evidence
+    ai: dict | None = None                          # AI verdict attached in --ai mode
 
     def text(self, lang: str = "en") -> str:
         return self.message if lang == "en" else self.message_zh

@@ -12,13 +12,7 @@ from click.testing import CliRunner
 from aicaudit.cli import main
 from aicaudit.config import merge_config
 from aicaudit.fix import FixStatus, fix_file
-from aicaudit.llm.client import (
-    AiConfig,
-    _mock_verify,
-    _parse_deep_response,
-    load_ai_config,
-    verify_findings,
-)
+from aicaudit.llm.client import AiConfig, load_ai_config
 from aicaudit.rules.base import Finding, Severity
 
 
@@ -146,18 +140,28 @@ def test_ai_config_openrouter():
     del os.environ["AICAUDIT_AI_PROVIDER"]
 
 
-def test_mock_verify_empty():
-    assert _mock_verify([]) == []
-
-
-def test_parse_deep_response_multiple():
-    findings = [make_finding(), make_finding(rule_id="S002")]
-    response = json.dumps([{"index": 0, "is_real": True, "reason": "ok"}, {"index": 1, "is_real": False, "reason": "fp"}])
-    result = _parse_deep_response(response, findings, {})
-    assert result[0]["ai_verified"] == True
-    assert result[1]["ai_verified"] == False
+def test_parse_verdicts_multiple():
+    from aicaudit.llm.client import _parse_verdicts
+    from aicaudit.llm.prompts import FindingEvidence
+    evidences = [
+        FindingEvidence(rule_id="S001", severity="warning", file="f.py", line=1,
+                        message="m", snippet="x"),
+        FindingEvidence(rule_id="S002", severity="warning", file="f.py", line=2,
+                        message="m", snippet="y"),
+    ]
+    response = json.dumps([
+        {"index": 0, "is_real": True, "confidence": 0.9, "reason": "ok"},
+        {"index": 1, "is_real": False, "confidence": 0.9, "reason": "fp"},
+    ])
+    result = _parse_verdicts(response, evidences)
+    assert result[0]["ai_status"] == "confirmed"
+    assert result[1]["ai_status"] == "false_positive"
 
 
 def test_verify_findings_mock_default():
-    result = verify_findings([make_finding()], {1: "x=1"})
+    from aicaudit.llm.client import verify_findings
+    from aicaudit.llm.prompts import FindingEvidence
+    result = verify_findings([FindingEvidence(rule_id="S001", severity="warning",
+                                              file="f.py", line=1, message="m")])
     assert len(result) == 1
+    assert result[0]["ai_status"] == "unverified"

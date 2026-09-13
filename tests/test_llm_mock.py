@@ -1,64 +1,117 @@
-"""Coverage: LLM verification with mocked HTTP."""
-import io
+"""Client verdict parsing: three-state schema with fail-safe semantics."""
 import json
-from unittest import mock
 
 from aicaudit.llm.client import (
-    AiConfig,
-    _build_deep_prompt,
-    _call_llm,
-    _llm_verify,
+    CONFIDENCE_THRESHOLD,
+    _extract_json_array,
+    _parse_verdicts,
+    filter_confirmed,
 )
-from aicaudit.rules.base import Finding, Severity
+from aicaudit.llm.prompts import FindingEvidence
 
 
-def make_finding(line=1, rule_id="S001"):
-    return Finding(rule_id=rule_id, message="test", message_zh="test", file="f.py", line=line, severity=Severity.WARNING)
+def make_evidence(rule_id="S001", line=5):
+    return FindingEvidence(rule_id=rule_id, severity="critical", file="app.py",
+                           line=line, message="sql risk", snippet="conn.execute(q)")
 
 
-class FakeResp:
-    def __init__(self, data):
-        self._buf = io.BytesIO(data)
-    def __enter__(self):
-        return self
-    def __exit__(self, *args):
-        return False
-    def read(self):
-        return self._buf.read()
+def ok_verdict(idx=0, is_real=True, confidence=0.9, **extra):
+    v = {"index": idx, "is_real": is_real, "confidence": confidence,
+         "severity": "critical", "cwe": "CWE-89", "vuln_type": "sql-injection",
+         "suggested_fix": "parameterize", "reason": "taint reaches sink"}
+    v.update(extra)
+    return v
 
 
-def test_build_deep_prompt_with_snippets():
-    prompt = _build_deep_prompt([make_finding(line=3)], {3: "exec(x)"}, {})
-    assert "[0]" in prompt
-    assert "exec(x)" in prompt
-    assert "S001" in prompt
+class TestConfirmedVerdicts:
+
+    def test_confirmed_kept_with_fields(self):
+        r = _parse_verdicts(json.dumps([ok_verdict()]), [make_evidence()])
+        assert r[0]["ai_status"] == "confirmed"
+        assert r[0]["ai_confidence"] == 0.9
+        assert r[0]["ai_cwe"] == "CWE-89"
+        assert r[0]["ai_vuln_type"] == "sql-injection"
+        assert r[0]["ai_suggested_fix"] == "parameterize"
+
+    def test_false_positive_kept(self):
+        r = _parse_verdicts(json.dumps([ok_verdict(is_real=False, confidence=0.95)]),
+                            [make_evidence()])
+        assert r[0]["ai_status"] == "false_positive"
+
+    def test_confidence_clamped(self):
+        r = _parse_verdicts(json.dumps([ok_verdict(confidence=7)]), [make_evidence()])
+        assert r[0]["ai_confidence"] == 1.0
+
+    def test_absolute_index_with_offset(self):
+        # model echoed absolute indices; parser is told the batch offset
+        r = _parse_verdicts(json.dumps([ok_verdict(idx=10)]), [make_evidence()], offset=10)
+        assert r[0]["ai_status"] == "confirmed"
+
+    def test_code_fenced_response(self):
+        text = "```json\n" + json.dumps([ok_verdict()]) + "\n```"
+        r = _parse_verdicts(text, [make_evidence()])
+        assert r[0]["ai_status"] == "confirmed"
+
+    def test_prose_wrapped_response(self):
+        text = "Here is my analysis:\n" + json.dumps([ok_verdict()]) + "\nDone."
+        r = _parse_verdicts(text, [make_evidence()])
+        assert r[0]["ai_status"] == "confirmed"
 
 
-def test_llm_verify_mocked_success():
-    findings = [make_finding()]
-    cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test", api_base="https://api.openai.com/v1")
-    mock_response = json.dumps({"choices": [{"message": {"content": json.dumps([{"index": 0, "is_real": True, "reason": "ok"}])}}]})
-    with mock.patch("urllib.request.urlopen", return_value=FakeResp(mock_response.encode())):
-        results = _llm_verify(findings, {1: "x=1"}, {}, cfg)
-    assert len(results) == 1
-    assert results[0]["ai_verified"] == True
+class TestFailSafe:
+
+    def test_unparseable_response_marks_unverified(self):
+        r = _parse_verdicts("the model rambled", [make_evidence()])
+        assert r[0]["ai_status"] == "unverified"
+        assert "unparseable" in r[0]["ai_reason"]
+
+    def test_error_object_response(self):
+        r = _parse_verdicts(json.dumps({"error": "LLM call failed"}), [make_evidence()])
+        assert r[0]["ai_status"] == "unverified"
+
+    def test_missing_index_marks_unverified(self):
+        r = _parse_verdicts(json.dumps([ok_verdict(idx=99)]), [make_evidence()])
+        assert r[0]["ai_status"] == "unverified"
+
+    def test_missing_is_real_marks_unverified(self):
+        v = ok_verdict()
+        del v["is_real"]
+        r = _parse_verdicts(json.dumps([v]), [make_evidence()])
+        assert r[0]["ai_status"] == "unverified"
+
+    def test_low_confidence_confirmed_downgraded(self):
+        r = _parse_verdicts(json.dumps([ok_verdict(confidence=0.2)]), [make_evidence()])
+        assert r[0]["ai_status"] == "unverified"
+        assert str(CONFIDENCE_THRESHOLD) in r[0]["ai_reason"]
+
+    def test_not_a_list_marks_unverified(self):
+        r = _parse_verdicts(json.dumps({"key": "value"}), [make_evidence()])
+        assert r[0]["ai_status"] == "unverified"
+
+    def test_empty_batch(self):
+        assert _parse_verdicts("[]", []) == []
 
 
-def test_llm_verify_mocked_exception():
-    findings = [make_finding()]
-    cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test", api_base="https://api.openai.com/v1")
-    with mock.patch("urllib.request.urlopen", side_effect=Exception("network down")):
-        results = _llm_verify(findings, {1: "x=1"}, {}, cfg)
-    assert len(results) == 1
-    assert results[0]["ai_verified"] == True
-    assert "Fallback" in results[0]["ai_reason"]
+class TestExtractJsonArray:
+
+    def test_plain(self):
+        assert isinstance(_extract_json_array('[{"a":1}]'), list)
+
+    def test_none_for_garbage(self):
+        assert _extract_json_array("no brackets here") is None
+
+    def test_none_for_empty(self):
+        assert _extract_json_array("") is None
+
+    def test_object_not_list(self):
+        assert _extract_json_array('{"a":1}') is None
 
 
-def test_call_llm_request_construction():
-    cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test", api_base="https://api.openai.com/v1")
-    mock_response = json.dumps({"choices": [{"message": {"content": "[]"}}]})
-    with mock.patch("urllib.request.urlopen", return_value=FakeResp(mock_response.encode())) as m:
-        result = _call_llm("test prompt", cfg)
-        req = m.call_args[0][0]
-        assert req.headers["Authorization"] == "Bearer sk-test"
-    assert "[]" in result
+def test_filter_confirmed():
+    items = [
+        {"ai_status": "confirmed"},
+        {"ai_status": "false_positive"},
+        {"ai_status": "unverified"},
+    ]
+    kept = filter_confirmed(items)
+    assert len(kept) == 1 and kept[0]["ai_status"] == "confirmed"

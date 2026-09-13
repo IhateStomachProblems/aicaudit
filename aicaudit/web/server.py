@@ -130,7 +130,7 @@ async def api_results(session_id: str):
 
 @app.post("/api/verify")
 async def api_verify(request: Request):
-    """Run AI verification on findings."""
+    """Attach AI verdicts to session findings (evidence-grounded)."""
     body = await request.json()
     session_id = body.get("session_id")
     session = sessions.get(session_id)
@@ -138,41 +138,51 @@ async def api_verify(request: Request):
         raise HTTPException(status_code=404, detail="Session not found")
 
     findings_data = session["findings"]
-    from aicaudit.rules.base import Finding
-    from aicaudit.rules.base import Severity as Sev
+    from aicaudit.llm.prompts import (
+        FindingEvidence,
+        enclosing_function_source,
+        imports_block,
+    )
 
-    findings = []
+    sources: dict[str, str] = {}
+    evidences = []
     for f in findings_data:
-        findings.append(Finding(
-            rule_id=f["rule_id"], message=f["message"], message_zh=f["message"],
-            file=f["file"], line=f["line"],
-            severity=Sev(f["severity"]),
-            snippet=f.get("snippet"), fix=f.get("fix"),
+        if f["file"] not in sources:
+            try:
+                # local single-user tool: blocking read of a source file is fine
+                with open(f["file"], encoding="utf-8-sig", errors="replace") as fh:  # noqa: ASYNC230
+                    sources[f["file"]] = fh.read()
+            except OSError:
+                sources[f["file"]] = ""
+        src = sources.get(f["file"], "")
+        evidences.append(FindingEvidence(
+            rule_id=f["rule_id"], severity=f["severity"], message=f["message"],
+            file=f["file"], line=f["line"], snippet=f.get("snippet") or "",
+            fix=f.get("fix"), function_source=enclosing_function_source(src, f["line"]),
+            imports=imports_block(src),
         ))
-
-    snippets = {}
-    for f in findings:
-        snippets[f.line] = f.snippet or ""
 
     cfg = load_ai_config()
     if cfg.provider == "mock":
         return {"error": "No AI provider configured", "ai_verified": False}
 
-    results = verify_findings(findings, snippets, config=cfg)
-    from aicaudit.llm.client import filter_verified
-    confirmed = filter_verified(results)
+    results = verify_findings(evidences, config=cfg)
+    confirmed = sum(1 for r in results if r.get("ai_status") == "confirmed")
 
-    for i, f in enumerate(findings_data):
-        if i < len(results):
-            f["ai_verified"] = results[i].get("ai_verified", True)
-            f["ai_reason"] = results[i].get("ai_reason", "")
-            f["ai_severity"] = results[i].get("ai_severity", f["severity"])
-            f["ai_suggested_fix"] = results[i].get("ai_suggested_fix", "")
+    for f, v in zip(findings_data, results):
+        f["ai_status"] = v.get("ai_status", "unverified")
+        f["ai_confidence"] = v.get("ai_confidence", 0.0)
+        f["ai_verified"] = v.get("ai_status") == "confirmed"   # legacy field for UI
+        f["ai_reason"] = v.get("ai_reason", "")
+        f["ai_severity"] = v.get("ai_severity", f["severity"])
+        f["ai_suggested_fix"] = v.get("ai_suggested_fix", "")
 
     session["findings"] = findings_data
     return {
         "total": len(findings_data),
-        "confirmed": len(confirmed),
+        "confirmed": confirmed,
+        "false_positive": sum(1 for r in results if r.get("ai_status") == "false_positive"),
+        "unverified": sum(1 for r in results if r.get("ai_status") == "unverified"),
         "ai_verified": True,
     }
 

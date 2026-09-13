@@ -34,6 +34,19 @@ def dump_markdown(findings: list[Finding], lang: str = "en") -> str:
                 label = "污点路径" if lang == "zh" else "Taint path"
                 for p in f.taint_path[:2]:
                     lines.append(f"- **{label}**: `{p.render()}`")
+            if f.ai:
+                status = f.ai.get("ai_status", "unverified")
+                confidence = f.ai.get("ai_confidence", 0.0)
+                ai_label = "AI 判定" if lang == "zh" else "AI verdict"
+                icon = {"confirmed": "confirmed", "false_positive": "false positive",
+                        "unverified": "unverified"}.get(status, status)
+                lines.append(f"- **{ai_label}**: {icon} (confidence {confidence:.2f})")
+                reason = f.ai.get("ai_reason", "")
+                if reason:
+                    lines.append(f"  - {reason}")
+                suggested = f.ai.get("ai_suggested_fix", "")
+                if suggested:
+                    lines.append(f"  - Fix: {suggested}")
             lines.append("")
 
     return "\n".join(lines)

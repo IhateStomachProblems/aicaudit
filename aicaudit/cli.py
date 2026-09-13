@@ -34,12 +34,14 @@ def web(host, port, reload):
               help="Output format: json, markdown, or sarif")
 @click.option("--lang", type=click.Choice(["en", "zh"]), default="en",
               help="Output language: en or zh")
-@click.option("--ai", is_flag=True, help="Use AI to verify findings (experimental)")
+@click.option("--ai", is_flag=True, help="Attach AI verdicts to findings (marks, never hides)")
+@click.option("--ai-strict", is_flag=True,
+              help="With --ai: keep only AI-confirmed findings (can suppress true positives)")
 @click.option("--rules", default=None,
               help="Comma-separated rule IDs to run, e.g. --rules S001,Q001")
 @click.option("--min-severity", type=click.Choice(["info", "warning", "error", "critical"]),
               default=None, help="Minimum severity to report")
-def scan_cmd(paths, output, lang, ai, rules, min_severity):
+def scan_cmd(paths, output, lang, ai, ai_strict, rules, min_severity):
     """Scan Python files for code issues."""
     if not paths:
         paths = ["."]
@@ -58,6 +60,11 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
         base_root=find_project_root(start),
         ai_verify=ai,
     )
+
+    if ai and ai_strict:
+        before = len(findings)
+        findings = [f for f in findings if (f.ai or {}).get("ai_status") == "confirmed"]
+        click.echo(f"--ai-strict: {before} findings -> {len(findings)} AI-confirmed", err=True)
 
     if not findings:
         click.echo("No issues found.", err=True)
@@ -84,7 +91,7 @@ def scan_cmd(paths, output, lang, ai, rules, min_severity):
                 if result.after and result.after != result.before:
                     _print_fix_diff(result)
         click.echo("", err=True)
-        click.echo("Run with --apply-fix to actually apply fixes.", err=True)
+        click.echo("Fix previews above are dry-run only; nothing was written.", err=True)
 
 
 @main.command()

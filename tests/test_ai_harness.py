@@ -1,146 +1,137 @@
-"""Tests for AI harness: batching, retry, edge cases."""
+"""Transport-layer tests: batching, retry, GLM responses, ollama fail-safe."""
 import io
 import json
 from unittest import mock
 
 from aicaudit.llm.client import (
     AiConfig,
-    _build_deep_prompt,
     _call_llm_with_retry,
+    _extract_response_text,
     _llm_verify,
-    _mock_verify,
-    _parse_deep_response,
+    verify_findings,
 )
-from aicaudit.rules.base import Finding, Severity
+from aicaudit.llm.prompts import FindingEvidence
 
 
-def make_finding(rule_id="S001", line=1, file="test.py"):
-    return Finding(
-        rule_id=rule_id, message="test", message_zh="test",
-        file=file, line=line, severity=Severity.WARNING,
-        snippet="x = 1",
-    )
+def make_evidence(rule_id="S001", line=1):
+    return FindingEvidence(rule_id=rule_id, severity="warning", file="test.py",
+                           line=line, message="test", snippet="x = 1")
 
 
 class FakeResp:
     def __init__(self, data):
         self._buf = io.BytesIO(data)
+
     def __enter__(self):
         return self
+
     def __exit__(self, *args):
         return False
+
     def read(self):
         return self._buf.read()
 
 
 def make_ok_resp(indices):
-    verdicts = [{"index": idx, "is_real": True, "reason": "ok",
-                 "severity": "warning", "vuln_type": "", "suggested_fix": ""}
+    verdicts = [{"index": idx, "is_real": True, "confidence": 0.9, "reason": "ok",
+                 "severity": "warning", "cwe": "", "vuln_type": "", "suggested_fix": ""}
                 for idx in indices]
     resp = json.dumps({"choices": [{"message": {"content": json.dumps(verdicts)}}]})
     return FakeResp(resp.encode())
 
 
-def test_batch_processing_splits_findings():
-    findings = [make_finding(line=i) for i in range(12)]
-    cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test",
-                   api_base="https://api.openai.com/v1")
+def test_batch_processing_splits_evidences():
+    evidences = [make_evidence(line=i) for i in range(12)]
+    cfg = AiConfig(provider="openai", model="m", api_key="k",
+                   api_base="https://api.test/v1")
+    seen_batch_sizes = []
 
-    call_count = [0]
-
-    def mock_urlopen(req, **kw):
-        call_count[0] += 1
-        body = json.loads(req.data)
-        user_msg = body["messages"][1]["content"]
-        indices = [int(line.split("[").pop().split("]")[0])
-                   for line in user_msg.split("\n") if "Finding [" in line]
+    def fake_urlopen(req, timeout=60):
+        body = json.loads(req.data.decode())
+        prompt = body["messages"][1]["content"]
+        n = prompt.count("=== Finding [")
+        seen_batch_sizes.append(n)
+        start_idx = seen_batch_sizes[-1] and (len(seen_batch_sizes) - 1) * 10
+        indices = list(range(start_idx, start_idx + n))
         return make_ok_resp(indices)
 
-    with mock.patch("urllib.request.urlopen", mock_urlopen):
-        results = _llm_verify(findings, {}, {}, cfg)
-
+    with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        results = _llm_verify(evidences, cfg)
     assert len(results) == 12
-    assert call_count[0] == 2
+    assert all(r["ai_status"] == "confirmed" for r in results)
+    assert seen_batch_sizes == [10, 2]
 
 
-def test_retry_on_failure_then_succeeds():
-    cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test",
-                   api_base="https://api.openai.com/v1")
+def test_retry_succeeds_after_failure():
+    cfg = AiConfig(provider="openai", model="m", api_key="k",
+                   api_base="https://api.test/v1")
     call_count = [0]
 
-    def mock_urlopen(req, **kw):
+    def fake_urlopen(req, timeout=60):
         call_count[0] += 1
         if call_count[0] == 1:
             raise RuntimeError("first attempt failed")
-        body = json.loads(req.data)
-        user_msg = body["messages"][1]["content"]
-        indices = [int(line.split("[").pop().split("]")[0])
-                   for line in user_msg.split("\n") if "Finding [" in line]
-        return make_ok_resp(indices)
+        return make_ok_resp([0])
 
-    with mock.patch("urllib.request.urlopen", mock_urlopen):
-        result = _call_llm_with_retry("test prompt", cfg, retries=1)
-
-    data = json.loads(result)
-    assert isinstance(data, list)
-    assert call_count[0] == 2
+    with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+         mock.patch("time.sleep"):
+        out = _call_llm_with_retry("prompt", cfg, retries=2)
+    parsed = json.loads(out)
+    assert isinstance(parsed, list) and parsed[0]["is_real"] is True
 
 
-def test_all_retries_fail_fallback():
-    cfg = AiConfig(provider="openai", model="gpt-4o-mini", api_key="sk-test",
-                   api_base="https://api.openai.com/v1")
-
-    with mock.patch("urllib.request.urlopen", side_effect=Exception("always down")):
-        result = _call_llm_with_retry("test prompt", cfg, retries=0)
-
-    data = json.loads(result)
-    assert "error" in data
+def test_retry_exhaustion_returns_error_json():
+    cfg = AiConfig(provider="openai", model="m", api_key="k")
+    with mock.patch("urllib.request.urlopen", side_effect=RuntimeError("down")), \
+         mock.patch("time.sleep"):
+        out = _call_llm_with_retry("prompt", cfg, retries=1)
+    assert "error" in json.loads(out)
 
 
-def test_prompt_offset_correct():
-    findings = [make_finding() for _ in range(3)]
-    prompt = _build_deep_prompt(findings, {}, {}, offset=5)
-    assert "Finding [5]" in prompt
-    assert "Finding [6]" in prompt
-    assert "Finding [7]" in prompt
+def test_glm_reasoning_content_extraction():
+    assert _extract_response_text({"content": "hello"}) == "hello"
+    assert _extract_response_text({"content": "", "reasoning_content": "thoughts"}) == "thoughts"
+    assert _extract_response_text({"content": "  ", "reasoning_content": " R "}) == " R "
 
 
-def test_mock_verify_edge_cases():
-    findings = [
-        make_finding(rule_id="S001"),
-        make_finding(rule_id="S002"),
-        Finding(rule_id="S003", message="err", message_zh="err",
-                file="x.py", line=1, severity=Severity.CRITICAL,
-                snippet="exec(x)", fix="use safe"),
-    ]
-    results = _mock_verify(findings)
-    assert len(results) == 3
-    assert all(r["ai_verified"] for r in results)
-    assert results[0]["rule_id"] == "S001"
-    assert results[2]["fix"] == "use safe"
-
-
-def test_parse_deep_response_missing_indices():
-    findings = [make_finding(line=1), make_finding(line=2)]
-    response = json.dumps([{"index": 0, "is_real": True, "reason": "ok",
-                            "severity": "warning", "vuln_type": "", "suggested_fix": ""}])
-    results = _parse_deep_response(response, findings, {})
-    assert len(results) == 2
-    assert results[0]["ai_verified"] == True
-    assert results[1]["ai_verified"] == True
-
-
-def test_parse_deep_response_empty_list():
-    findings = [make_finding()]
-    response = "[]"
-    results = _parse_deep_response(response, findings, {})
+def test_ollama_no_server_fail_safe():
+    """Transport death on ollama must not rubber-stamp findings as confirmed."""
+    evidences = [make_evidence()]
+    cfg = AiConfig(provider="ollama", model="llama3.2",
+                   api_base="http://localhost:11434/v1")
+    with mock.patch("urllib.request.urlopen", side_effect=Exception("no server")), \
+         mock.patch("time.sleep"):
+        results = _llm_verify(evidences, cfg)
     assert len(results) == 1
-    assert results[0]["ai_verified"] == True
+    assert results[0]["ai_status"] == "unverified"
 
 
-def test_parse_deep_response_not_list():
-    findings = [make_finding()]
-    response = '{"error": "some error"}'
-    results = _parse_deep_response(response, findings, {})
-    assert len(results) == 1
-    assert "Fallback" in results[0]["ai_reason"]
+def test_verify_findings_mock_provider_unverified():
+    results = verify_findings([make_evidence()])
+    assert results[0]["ai_status"] == "unverified"
+    assert "no AI provider" in results[0]["ai_reason"]
+
+
+def test_verify_findings_no_key_unverified(monkeypatch):
+    monkeypatch.setenv("AICAUDIT_AI_PROVIDER", "openai")
+    monkeypatch.delenv("AICAUDIT_AI_KEY", raising=False)
+    results = verify_findings([make_evidence()])
+    assert results[0]["ai_status"] == "unverified"
+
+
+def test_openai_compat_endpoint_and_headers():
+    cfg = AiConfig(provider="relay", model="gpt-x", api_key="sk-k",
+                   api_base="https://relay.test/v1")
+    captured = {}
+
+    def fake_urlopen(req, timeout=60):
+        captured["url"] = req.full_url
+        captured["auth"] = req.headers.get("Authorization")
+        captured["body"] = json.loads(req.data.decode())
+        return make_ok_resp([0])
+
+    with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        _llm_verify([make_evidence()], cfg)
+    assert captured["url"] == "https://relay.test/v1/chat/completions"
+    assert captured["auth"] == "Bearer sk-k"
+    assert captured["body"]["model"] == "gpt-x"

@@ -5,7 +5,7 @@ import re
 import sys
 import time
 
-from aicaudit.rules.base import Finding, ScanContext, Severity, active_rules
+from aicaudit.rules.base import ScanContext, Severity, active_rules
 
 # Inline suppression: # aicaudit: ignore  OR  # aicaudit: ignore=S001
 _SUPPRESS_RE = re.compile(r"#\s*aicaudit:\s*ignore(?:\s*[= ]\s*(\S+))?", re.IGNORECASE)
@@ -62,7 +62,7 @@ def scan(paths, lang="en", rules=None, min_severity=None, ignore_patterns=None, 
     _print_summary(all_findings, len(files), elapsed, lang)
 
     if ai_verify and all_findings:
-        all_findings = _ai_verify_findings(all_findings, base_root)
+        all_findings = _ai_verify_findings(all_findings, base_root, taint_index)
     return all_findings
 
 
@@ -174,41 +174,50 @@ def _scan_single_file(file_path, sel_rules, min_severity, lang, taint_index=None
     return findings
 
 
-def _ai_verify_findings(all_findings, base_root):
-    """Run AI verification on findings with evidence-chain context."""
-    from pathlib import Path as _P
+def _ai_verify_findings(all_findings, base_root, taint_index=None):
+    """Attach AI verdicts to findings (mark, never silently delete).
 
-    from aicaudit.graph import CodeGraph
-    from aicaudit.llm.client import filter_verified, verify_findings
-    from aicaudit.rules.base import Severity as _Sev
+    Evidence per finding: the taint path(s) the engine already traced plus the
+    enclosing function source and the file's imports.
+    """
+    from aicaudit.llm.client import verify_findings
+    from aicaudit.llm.prompts import (
+        FindingEvidence,
+        enclosing_function_source,
+        imports_block,
+    )
 
-    snippets = {f.line: f.snippet or "" for f in all_findings}
-    try:
-        graph = CodeGraph(base_root or _P("."))
-        graph.build()
-        evidence_chains = {}
-        for f in all_findings:
-            key = f.rule_id + ":" + f.file + ":" + str(f.line)
-            chains = graph.find_evidence_chain(f.rule_id, max_depth=3)
-            if chains:
-                evidence_chains[key] = chains
-    except Exception:  # noqa: BLE001
-        evidence_chains = {}
+    sources: dict[str, str] = {}
+    for f in all_findings:
+        if f.file not in sources:
+            try:
+                with open(f.file, encoding="utf-8-sig", errors="replace") as fh:
+                    sources[f.file] = fh.read()
+            except OSError:
+                sources[f.file] = ""
 
-    verified = verify_findings(all_findings, snippets, evidence_chains)
-    real = filter_verified(verified)
-    print(f"  AI verdict: {len(all_findings)} static -> {len(real)} confirmed", file=sys.stderr)
-    if evidence_chains:
-        print(f"  Evidence chains: {sum(len(v) for v in evidence_chains.values())} paths traced", file=sys.stderr)
-
-    converted = []
-    for v in real:
-        sev = v.get("ai_severity") or v.get("severity", "warning")
-        converted.append(Finding(
-            rule_id=v["rule_id"], message=v["message"],
-            message_zh=v.get("message_zh", v["message"]),
-            file=v["file"], line=v["line"],
-            severity=_Sev(sev),
-            snippet=v.get("snippet"), fix=v.get("ai_suggested_fix") or v.get("fix"),
+    evidences = []
+    for f in all_findings:
+        src = sources.get(f.file, "")
+        evidences.append(FindingEvidence.from_finding(
+            f,
+            function_source=enclosing_function_source(src, f.line),
+            imports=imports_block(src),
         ))
-    return converted
+
+    verdicts = verify_findings(evidences)
+    by_key = {(v["rule_id"], v["file"], v["line"]): v for v in verdicts}
+
+    confirmed = false_positive = unverified = 0
+    for f in all_findings:
+        v = by_key.get((f.rule_id, f.file, f.line))
+        if v is None:
+            continue
+        f.ai = v
+        status = v.get("ai_status", "unverified")
+        confirmed += status == "confirmed"
+        false_positive += status == "false_positive"
+        unverified += status == "unverified"
+    print(f"  AI verdict: {len(all_findings)} static -> {confirmed} confirmed, "
+          f"{false_positive} false positive, {unverified} unverified", file=sys.stderr)
+    return all_findings

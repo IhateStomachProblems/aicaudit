@@ -11,7 +11,6 @@ from aicaudit.config import (
     merge_config,
 )
 from aicaudit.fix import FixStatus, _apply_fix_to_line, fix_file
-from aicaudit.llm.client import _parse_deep_response
 from aicaudit.rules.base import Finding, Severity
 
 
@@ -101,14 +100,17 @@ def test_fix_file_no_fix_field():
         os.unlink(fname)
 
 
-# llm/client.py: parse_response edge cases
+# llm/client.py: verdict parse edge cases (fail-safe semantics)
 
-def test_parse_deep_response_empty_list():
-    result = _parse_deep_response("[]", [], {})
-    assert result == []
+def test_parse_verdicts_empty_batch():
+    from aicaudit.llm.client import _parse_verdicts
+    assert _parse_verdicts("[]", []) == []
 
 
-def test_parse_deep_response_not_list():
-    result = _parse_deep_response("{\"key\": \"value\"}", [make_finding()], {})
-    assert result[0]["ai_verified"] == True
-    assert "Fallback" in result[0]["ai_reason"]
+def test_parse_verdicts_not_list():
+    from aicaudit.llm.client import _parse_verdicts
+    from aicaudit.llm.prompts import FindingEvidence
+    ev = FindingEvidence(rule_id="S001", severity="warning", file="f.py",
+                         line=1, message="m", snippet="x")
+    result = _parse_verdicts('{"key": "value"}', [ev])
+    assert result[0]["ai_status"] == "unverified"
