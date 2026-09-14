@@ -5,12 +5,13 @@
 > 证据链驱动的 Python 代码审计：每个判定都附带可复核的污点传播路径（source → … → sink）
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python"/>
+  <a href="https://pypi.org/project/aicaudit/"><img src="https://img.shields.io/pypi/v/aicaudit?color=6366f1&label=PyPI" alt="PyPI"/></a>
+  <a href="https://github.com/IhateStomachProblems/aicaudit/actions/workflows/ci.yml"><img src="https://github.com/IhateStomachProblems/aicaudit/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <img src="https://img.shields.io/pypi/pyversions/aicaudit" alt="Python"/>
   <img src="https://img.shields.io/badge/tests-305%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
-  <img src="https://img.shields.io/badge/SARIF-2.1-blue" alt="SARIF"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/aicaudit?style=social" alt="Stars"/>
 </p>
 
@@ -38,13 +39,17 @@ S001  app.py:16  SQL injection risk
 - **SARIF codeFlows**: taint paths render natively in the GitHub Security tab
 - **Zero config**: `pip install` and scan; works offline, local LLMs supported
 
+<p align="center">
+  <a href=".github/assets/web-taint-path.png"><img src=".github/assets/web-taint-path.png" width="88%" alt="AICAudit results browser: highlighted code context, engine-verified taint path stepper, AI verdict card, and fix actions"/></a>
+  <br><sub>Real scan of a vulnerable Flask app — code context, engine-verified taint path (source → sink), AI verdict card, one-click fix. Actual UI, actual output, zero retouching.</sub>
+</p>
+
 ---
 
 ## Quick Start
 
 ```bash
-# From source (PyPI package arrives with v0.2.0)
-pip install git+https://github.com/IhateStomachProblems/aicaudit.git
+pip install aicaudit
 ```
 
 ```bash
@@ -202,6 +207,11 @@ The UI is vendored and offline-first — no CDN, no build step, works air-gapped
   trends across runs
 - Rules browser and AI provider config (relay / OpenAI / Claude / OpenRouter /
   local ollama)
+
+<p align="center">
+  <a href=".github/assets/web-results.png"><img src=".github/assets/web-results.png" width="88%" alt="AICAudit results overview: severity summary, filterable findings list, export and AI verification"/></a>
+  <br><sub>Results overview — severity summary, filterable findings with CWE chips, JSON/SARIF export.</sub>
+</p>
 
 API docs at `/docs` (Swagger UI). Found something rough? [Open an issue](https://github.com/IhateStomachProblems/aicaudit/issues).
 
@@ -376,8 +386,8 @@ MIT © IhateStomachProblems
 ## 快速开始
 
 ```bash
-# 源码安装（v0.2.0 将上架 PyPI）
-pip install git+https://github.com/IhateStomachProblems/aicaudit.git
+# 从 PyPI 安装
+pip install aicaudit
 aicaudit scan ./项目目录    # 扫描项目
 aicaudit scan ./src --lang zh  # 使用中文输出
 aicaudit scan ./src --output json  # JSON 输出
