@@ -1,8 +1,8 @@
-# AICAudit 🛡️
+# aicaudit
 
-> Evidence-driven AI code audit for Python — every verdict ships with a machine-checkable taint path.
+> Static analysis that shows its work, plus AI that doesn't make things up.
 >
-> 证据链驱动的 Python 代码审计：每个判定都附带可复核的污点传播路径（source → … → sink）
+> 闭嘴给证据的 Python 代码审计：静态引擎先把污点路径走通，AI 只负责拿着证据下结论。
 
 <p align="center">
   <a href="https://pypi.org/project/aicaudit/"><img src="https://img.shields.io/pypi/v/aicaudit?color=6366f1&label=PyPI" alt="PyPI"/></a>
@@ -11,110 +11,151 @@
   <img src="https://img.shields.io/badge/tests-305%20passed-brightgreen" alt="Tests"/>
   <img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
-  <img src="https://img.shields.io/badge/rules-15-brightgreen" alt="Rules"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/aicaudit?style=social" alt="Stars"/>
 </p>
 
 ---
 
-## Why AICAudit
+## Why I built this
 
-Other tools give you a verdict. AICAudit gives you the **evidence**:
+I like what Bandit tries to do, and I like what LLMs can do for code review. I got tired of what both do wrong.
+
+Bandit will flag `eval("1+1")` — a string literal — as a critical injection risk. It will tell you `os.path.join(BASE_DIR, "config.json")` is a path traversal because `BASE_DIR` is a variable, even when it's built from `__file__` three lines up. So you either drown in noise or start ignoring the tool.
+
+The new wave of AI review tools has the opposite problem: confident verdicts with nothing behind them. Ask an LLM "is this SQL injection?" and it'll happily guess from a one-line snippet.
+
+aicaudit is my attempt at the missing middle ground. A taint engine does the boring, verifiable work first — it traces user input from `request.args`, `input()`, `os.environ` through your assignments, f-strings and function calls, right up to the dangerous sink. Constants get *proven* safe and stay quiet. If a path from user input to the sink actually exists, you get the whole thing spelled out, hop by hop. Only then does an LLM get involved, and it doesn't get to guess: it sees the full function and the traced path, and its answer lands in one of three buckets — confirmed, false positive, or "not sure". The last one is a real answer here, not a failure.
 
 ```text
-S001  app.py:16  SQL injection risk
-  taint path: app.py:14 request.args (Flask user input)
-            -> app.py:14 assigned to 'uid'
-            -> app.py:15 assigned to 'query'
-            -> app.py:16 conn.execute()
+S001  shop.py:49  SQL injection risk
+  taint path: shop.py:48 request.args (Flask user input)
+           -> shop.py:48 assigned to 'term'
+           -> shop.py:49 .execute()
 ```
 
-- **Taint engine** (pure Python, zero plugins): tracks user input from source
-  (Flask/Django/FastAPI request, `input()`, `os.environ`, `sys.argv`) through
-  assignments, f-strings, concatenation, and **across function boundaries** to
-  the sink — and proves constants safe, killing the classic false-positive
-  classes (`open(BASE_DIR/"x")`, constant SQL variables, `eval("1+1")`)
-- **AI verdicts with receipts**: the LLM sees the full function and the taint
-  path, not a one-line snippet — hallucination-resistant by construction
-- **SARIF codeFlows**: taint paths render natively in the GitHub Security tab
-- **Zero config**: `pip install` and scan; works offline, local LLMs supported
+That's a real output, from the screenshot below, from a real scan.
 
 <p align="center">
   <a href=".github/assets/web-taint-path.png"><img src=".github/assets/web-taint-path.png" width="88%" alt="AICAudit results browser: highlighted code context, engine-verified taint path stepper, AI verdict card, and fix actions"/></a>
-  <br><sub>Real scan of a vulnerable Flask app — code context, engine-verified taint path (source → sink), AI verdict card, one-click fix. Actual UI, actual output, zero retouching.</sub>
+  <br><sub>Actual UI, actual scan of a deliberately vulnerable Flask app. Zero retouching.</sub>
 </p>
 
 ---
 
-## Quick Start
+## Quick start
 
 ```bash
 pip install aicaudit
+aicaudit scan ./src
 ```
 
+That's the whole onboarding. No config file required, no tree-sitter compilation step, no account.
+
+Other things you'll probably want:
+
 ```bash
-# Scan a file or directory
-aicaudit scan ./src
-
-# Markdown report (default)
-aicaudit scan ./src --output markdown
-
-# JSON output (for CI / scripts / AI agent integration)
-aicaudit scan ./src --output json
-
-# SARIF 2.1 output (GitHub Code Scanning compatible)
-aicaudit scan ./src --output sarif
-
-# Chinese language
-aicaudit scan ./src --lang zh
-
-# CI gate: exit 1 when any finding is error or worse (0 clean / 2 usage error)
-aicaudit scan ./src --fail-on error
+aicaudit scan ./src --output json      # for scripts and CI
+aicaudit scan ./src --output sarif     # GitHub Code Scanning eats this directly
+aicaudit scan ./src --lang zh          # 中文输出
+aicaudit scan ./src --ai               # attach AI verdicts (marks, never hides)
+aicaudit scan ./src --fail-on error    # CI gate: exit 1 if anything error+
+aicaudit web                           # local web UI at 127.0.0.1:8080
 ```
 
 ---
 
-## CI & Git Integration
+## What it checks
 
-**One-line GitHub Action** (this repo ships a composite action at its root):
+15 rules at the moment — 8 security, 5 quality, 2 performance. The security ones are where the taint engine earns its keep.
+
+| ID | Rule | Severity | Taint-aware |
+|----|------|----------|-------------|
+| S001 | SQL injection | critical | yes |
+| S002 | Hardcoded secrets | critical | — |
+| S003 | Dangerous functions (eval, exec, pickle, os.system…) | error | yes |
+| S004 | Path traversal | error | yes |
+| S005 | SSRF | error | yes |
+| S006 | Weak crypto (MD5/SHA1/DES/ECB) | warning | — |
+| S007 | XXE | error | yes |
+| S008 | Insecure random | warning | — |
+| Q001–Q005 | bare except, magic numbers, undefined names, TODOs, unused vars | info–error | — |
+| P001–P002 | cyclomatic complexity, nesting depth | warning | — |
+
+"Taint-aware" means the rule asks the engine whether user input actually reaches the sink. Provably constant arguments don't fire — which is why aicaudit doesn't flag `open(config_path)` when `config_path` was literally defined three lines up, and doesn't flag `eval("1+1")` at all.
+
+Every security finding carries a **CWE** and, when a path was traced, the full **source → hops → sink** chain — in the terminal output, in JSON/Markdown, and as native SARIF `codeFlows` that render in the GitHub Security tab.
+
+Inline suppression works the way you'd expect:
+
+```python
+query = f"SELECT * FROM users WHERE id={user_id}"  # aicaudit: ignore S001
+```
+
+---
+
+## The AI part (optional, honest by construction)
+
+`--ai` sends each finding to an LLM — but not as a bare snippet. It gets the enclosing function, the file's imports, and the traced taint path, plus instructions tuned to the finding type (injection findings get "check the sanitizer on this path"; policy findings like weak hashes get "judge the usage context"). Then the verdict is one of exactly three things:
+
+- **confirmed** — AI agrees it's real, with a confidence score
+- **false_positive** — AI explains which sanitizer or fact kills it
+- **unverified** — the AI was missing, errored, timed out, or answered with low confidence
+
+That third state is the point. An unparseable or lazy AI answer never becomes a silent pass. If you want aggressive filtering anyway, `--ai-strict` keeps only confirmed findings — but the research I based this on ([arXiv 2601.22952](https://arxiv.org/abs/2601.22952)) found the best LLM verifiers still wrongly suppress ~22% of true vulnerabilities, so the default is: mark everything, hide nothing.
+
+Works with OpenAI-compatible relays (中转), OpenAI, Claude, OpenRouter, or a local ollama. No API key? Everything above still works — you just don't get AI verdicts.
+
+---
+
+## The web UI
+
+```bash
+aicaudit web    # http://127.0.0.1:8080
+```
+
+No CDN, no npm, no build step — the CSS and JS are vendored, so it works on an air-gapped machine. What you get:
+
+- code context around each finding with server-side syntax highlighting
+- the taint path drawn as a **stepper**: source in yellow, sink in red, hops in between
+- AI verdict cards with confidence, and a diff-preview → apply → rollback loop for fixes (with `.bak` backups)
+- live per-file scan progress (SSE — not a fake progress bar), and scan history that survives restarts
+
+<p align="center">
+  <a href=".github/assets/web-results.png"><img src=".github/assets/web-results.png" width="88%" alt="AICAudit results overview"/></a>
+</p>
+
+---
+
+## Benchmarks — with the receipts
+
+There's a labeled corpus in `benchmarks/` (104 cases: function-level samples plus a small Flask app with planted bugs) and a runner that scores aicaudit **and Bandit** on it:
+
+```bash
+python benchmarks/run.py
+```
+
+Current result: 100% precision and recall on all 8 security rules, with 4 of them carrying full taint paths. Bandit, on the comparable buckets, lands between 67% and 100% F1 and doesn't cover path traversal, SSRF, or insecure random at all.
+
+Now the honest part: it's *my* corpus. I labeled it, so my tool scoring 100% on it deserves your skepticism — that's exactly why the runner, the ground truth, and the corpus are all in the repo. Run it, extend it, break it. The report also documents where aicaudit is deliberately conservative and where it's deliberately silent (constant arguments to dangerous functions are a code smell, not an injection — Bandit flags those; aicaudit doesn't, on purpose, and says so in the results file).
+
+---
+
+## CI, hooks, custom rules
+
+One-line GitHub Action (the composite action lives in this repo):
 
 ```yaml
 - uses: IhateStomachProblems/aicaudit@main
   with:
-    path: .
-    fail-on: error      # optional: fail the job at this severity
-    sarif: "true"       # optional: upload SARIF to Code Scanning
+    fail-on: error
+    sarif: "true"
 ```
 
-**pre-commit** (local hook until the PyPI release):
+pre-commit hook definition is in [.pre-commit-hooks.yaml](.pre-commit-hooks.yaml). Project config is one command away (`aicaudit init` writes `[tool.aicaudit]` into your pyproject.toml).
 
-```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: aicaudit
-        name: aicaudit
-        entry: aicaudit scan --fail-on error
-        language: system
-        types: [python]
-```
-
-**Project config** — generate it interactively:
-
-```bash
-aicaudit init            # writes [tool.aicaudit] into pyproject.toml
-```
-
----
-
-## Custom Rules (Python files, no DSL)
-
-Drop rule files into `.aicaudit/rules/` (auto-discovered) or list extra dirs
-under `[tool.aicaudit] rule-dirs`. Rules are ordinary Python using the public
-API — a later registration with the same id overrides the builtin:
+Custom rules are plain Python files dropped into `.aicaudit/rules/` — no DSL, no core changes:
 
 ```python
-# .aicaudit/rules/no_print.py
 import ast
 from aicaudit.rules.base import Finding, Rule, Severity, register
 
@@ -135,306 +176,113 @@ class NoPrint(Rule):
                 and n.func.id == "print"]
 ```
 
-A ready-to-copy example lives at
-[examples/custom_rule_example.py](examples/custom_rule_example.py).
-(A declarative YAML rule format is planned for v0.3 — the loader is ready.)
+A full working example is in [examples/custom_rule_example.py](examples/custom_rule_example.py). (A YAML rule format is planned for v0.3 — issue [#2](https://github.com/IhateStomachProblems/aicaudit/issues/2).)
 
 ---
 
-## Rules
+## What it won't do
 
-### Security
+- It's **Python only** for now. JS/TS and Go are on the roadmap ([#3](https://github.com/IhateStomachProblems/aicaudit/issues/3), [#4](https://github.com/IhateStomachProblems/aicaudit/issues/4)).
+- The taint engine is intra- and inter-procedural within what AST analysis can see. Dataflow through closures, metaprogramming, or C extensions will be missed. That's a fundamental limit of this approach, not a bug I haven't fixed.
+- AI verdicts need an API key (or a local model). Without one you still get everything static.
+- It's a young project. It will miss things and it will occasionally annoy you — tell me about both.
 
-| ID | Rule | Severity |
-|----|------|----------|
-| S001 | SQL injection detection | CRITICAL |
-| S002 | Hardcoded secret detection | CRITICAL |
-| S003 | Dangerous functions (eval, exec, pickle, os.system) | ERROR |
-| S004 | Path traversal detection | ERROR |
-| S005 | SSRF detection | ERROR |
-| S006 | Weak cryptography detection | WARNING |
-| S007 | XML External Entity (XXE) detection | ERROR |
-| S008 | Insecure random (non-crypto PRNG) | WARNING |
-
-### Quality
-
-| ID | Rule | Severity |
-|----|------|----------|
-| Q001 | Bare except detection | WARNING |
-| Q002 | Magic number detection | INFO |
-| Q003 | Undefined name detection | ERROR |
-| Q004 | TODO/FIXME comment detection | INFO |
-| Q005 | Unused variable detection | WARNING |
-
-### Performance
-
-| ID | Rule | Severity |
-|----|------|----------|
-| P001 | Cyclomatic complexity | WARNING |
-| P002 | Nesting depth | WARNING |
+Performance, for the curious (including interpreter startup, worst of 3 runs, Python 3.13): single file ~0.17s, this repo's own 44-file codebase ~0.70s.
 
 ---
 
-## Inline Suppression
+## The numbers behind the badges
 
-Suppress specific findings with inline comments:
+305 tests, 92% coverage, ruff and mypy clean, CI on Python 3.10–3.13. All of it runs in [Actions](https://github.com/IhateStomachProblems/aicaudit/actions) on every push, and the self-scan step audits aicaudit with aicaudit.
 
-```python
-# Ignore a specific rule on this line
-query = f"SELECT * FROM users WHERE id={user_id}"  # aicaudit: ignore S001
+If you want to contribute: [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the gates, and a note on why fixtures full of fake vulnerabilities live in `tests/` and `benchmarks/`.
 
-# Ignore all rules on this line
-eval(user_input)  # aicaudit: ignore
-```
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ---
+---
 
-## Web UI
+<div align="center">
 
-Prefer a browser over the terminal? Start the built-in web interface:
+# AICAudit 中文版
+
+</div>
+
+## 我为什么写这个
+
+Bandit 的思路我认可，LLM 做代码审查的潜力我也认可，但两家的毛病我都忍不了。
+
+Bandit 会把 `eval("1+1")` 这种字符串字面量报成严重注入风险，会把 `os.path.join(BASE_DIR, "config.json")` 报成路径穿越——就因为 `BASE_DIR` 是个变量，哪怕它三行前刚从 `__file__` 算出来。结果就是要么被噪音淹没，要么把工具关掉。
+
+新一代 AI 审查工具正好反过来：结论给得斩钉截铁，依据一个字没有。丢一行代码问 LLM"这是不是 SQL 注入"，它真敢直接答。
+
+aicaudit 是我补中间地带的尝试。污点引擎先干枯燥但可验证的活：把用户输入从 `request.args`、`input()`、`os.environ` 一路追过赋值、f-string、函数调用，直到危险的 sink。常量会被**证明**安全，然后闭嘴。只有当真有一条从用户输入到 sink 的路时才报警，而且整条路一步一步给你列出来。LLM 是最后才上场的，它不许猜——它拿到的是完整函数体加这条路径，结论只有三种：confirmed（真问题）、false_positive（误报，并说明是哪个净化器挡住了）、unverified（没把握）。
+
+第三种才是这个工具的态度。AI 没答上来、答烂了、置信度低，都老老实实标"未验证"，绝不偷偷放行。想激进过滤也行，`--ai-strict` 显式开启——但我参考的研究（[arXiv 2601.22952](https://arxiv.org/abs/2601.22952)）实测过，最好的 LLM 验证器也会错杀约 22% 的真漏洞，所以默认是：全标出来，一个不藏。
+
+## 上手
 
 ```bash
-aicaudit web          # http://127.0.0.1:8080
+pip install aicaudit
+aicaudit scan ./src              # 扫描
+aicaudit scan ./src --lang zh    # 中文输出
+aicaudit scan ./src --ai         # 附带 AI 判定
+aicaudit scan ./src --fail-on error   # CI 门禁：有 error 及以上就退出码 1
+aicaudit web                     # 本地 Web 界面（127.0.0.1:8080）
 ```
 
-The UI is vendored and offline-first — no CDN, no build step, works air-gapped:
+不需要配置文件，不需要编译 tree-sitter，不需要注册任何账号。
 
-- **Results browser**: code context with syntax highlighting (server-side
-  pygments), the **taint path as a visual stepper** (source → hops → sink),
-  AI verdict card with confidence, and diff-preview/apply/rollback for fixes
-- **Live scan progress**: per-file streaming (SSE), no fake progress bars
-- **Scan history**: sessions persist under `.aicaudit/web/`, dashboard shows
-  trends across runs
-- Rules browser and AI provider config (relay / OpenAI / Claude / OpenRouter /
-  local ollama)
+## 它能查什么
 
-<p align="center">
-  <a href=".github/assets/web-results.png"><img src=".github/assets/web-results.png" width="88%" alt="AICAudit results overview: severity summary, filterable findings list, export and AI verification"/></a>
-  <br><sub>Results overview — severity summary, filterable findings with CWE chips, JSON/SARIF export.</sub>
-</p>
+15 条规则：8 条安全（SQL 注入、硬编码密钥、危险函数、路径穿越、SSRF、弱加密、XXE、不安全随机数）、5 条质量、2 条性能。安全规则全部带 **CWE 编号**，能追到污点路径的会把 **source → 传播 → sink** 整条链给你——终端、JSON/Markdown、GitHub Security Tab（SARIF codeFlows 原生渲染）里都能看。
 
-API docs at `/docs` (Swagger UI). Found something rough? [Open an issue](https://github.com/IhateStomachProblems/aicaudit/issues).
+误报这事是认真处理过的：常量参数不触发（引擎会证明它安全）、净化器会掐断路径（`os.path.basename`、`int()`、参数化查询这些都认）、行内 `# aicaudit: ignore S001` 想压就压。
 
----
+## 基准，带收据
 
-## GitHub Code Scanning Integration
-
-AICAudit produces [SARIF 2.1](https://sarifweb.azurewebsites.net/) output compatible with GitHub Code Scanning:
-
-```bash
-aicaudit scan ./src --output sarif > aicaudit.sarif
-```
-
-Upload the result in a GitHub Actions workflow:
-
-```yaml
-- name: Run AICAudit
-  run: aicaudit scan . --output sarif > aicaudit.sarif
-
-- name: Upload SARIF
-  uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: aicaudit.sarif
-```
-
----
-
-## Caveats
-
-AICAudit is a young project. Here are some honest limitations:
-
-- **Python only** for now — other languages are planned
-- **Static analysis** — not a runtime security tool
-- **Best-effort** — no tool catches every bug ; please review findings critically
-- The rules reflect common patterns but may not fit every codebase
-
----
-
-## Performance
-
-| Scenario | Time |
-|----------|------|
-| 35 files directory | ~0.13s |
-| Single file | ~0.01s |
-
----
-
-## Benchmarks
-
-Labeled corpus (104 cases: function-level samples + a realistic Flask app with
-planted vulnerabilities), scored against ground truth with an honest
-methodology — including the categories where aicaudit is deliberately
-conservative or deliberately silent. Bandit runs on the same corpus for
-reference; buckets Bandit does not cover are marked.
-
-| Rule | aicaudit P/R | Bandit P/R (comparable bucket) |
-|------|-------------|-------------------------------|
-| S001 SQL injection | 100% / 100% | 100% / 86% |
-| S003 dangerous functions | 100% / 100% | 92% / 75% |
-| S004 path traversal | 100% / 100% | no coverage |
-| S005 SSRF | 100% / 100% | no coverage |
-| S007 XXE | 100% / 100% | 100% / 50% |
-
-Full table with F1, timing, and the honest-notes section (design tiers,
-conservative flags): [benchmarks/RESULTS.md](benchmarks/RESULTS.md).
-Reproduce and challenge it yourself:
+`benchmarks/` 里有 104 个标注用例（函数级样例加一个故意埋洞的 Flask 小应用）和一个评分脚本，aicaudit 和 Bandit 同台跑：
 
 ```bash
 python benchmarks/run.py
 ```
 
----
+当前成绩：8 条安全规则全部 **100% 精确率 / 100% 召回率**，其中 4 条带完整污点路径。Bandit 在可比项目上 F1 介于 67%–92%，路径穿越、SSRF、不安全随机数三个类目它根本不覆盖。
 
-## Testing
+老实说：语料是我标的，我的工具在我自己的语料上拿满分，你完全有理由怀疑——所以标注、跑分脚本、语料全在仓库里，欢迎跑一遍、加用例、来打脸。报告里也写明了哪些场景工具是故意保守、哪些是故意沉默的（比如常量参数的危险函数调用是坏味道不是注入，Bandit 报，aicaudit 故意不报，结果文件里写得明明白白）。
 
-- 305 unit tests (pytest)
-- 92% code coverage (pytest-cov)
-- Taint engine: 17 dedicated tests (sources, constness, sanitizers, interprocedural)
-- AI pipeline: fail-safe parsing, transport retry, category-aware prompts all tested
-- Integration tests for CLI, JSON, Markdown, SARIF, Web UI, Chinese output
-- Self-scan validation: we audit our own codebase
-- CI: GitHub Actions on Python 3.10–3.13 (ruff + mypy + coverage + self-scan)
-
----
-
-## AI Verdicts (evidence-grounded, fail-safe)
-
-`aicaudit scan ./src --ai` attaches a verdict to every finding. The LLM sees
-the full enclosing function, the file's imports, and the engine-traced taint
-path — not a one-line snippet — and answers with a structured verdict
-(`is_real`, `confidence`, `cwe`, `reason`, `suggested_fix`).
-
-Three verdict states, by design:
-
-| status | meaning |
-|--------|---------|
-| `confirmed` | AI agrees it is real, confidence ≥ 0.5 |
-| `false_positive` | AI judged it noise (reason always included) |
-| `unverified` | missing/failed/low-confidence response — **never** auto-confirmed |
-
-Why not auto-filter? The best published LLM-verifier configurations still
-wrongly suppress ~22% of true vulnerabilities ([arXiv 2601.22952](https://arxiv.org/abs/2601.22952)),
-so verdicts mark findings instead of deleting them. If you want aggressive
-filtering anyway, it is an explicit opt-in:
+## Web 界面
 
 ```bash
-aicaudit scan ./src --ai --ai-strict    # keep only AI-confirmed findings
+aicaudit web    # http://127.0.0.1:8080
 ```
 
-Prompts are category-aware: injection-class findings (S001/S003/S004/S005/S007)
-get dataflow verification instructions anchored on the taint path;
-policy-class findings (S002/S006/S008) get usage-context instructions —
-targeting the documented failure modes of LLM verifiers (surface pattern
-matching, CWE mislabeling, crypto/policy dismissals).
+零依赖、离线可用（CSS/JS 全部内置，不连任何 CDN）。每个 finding 点开是三段式：高亮代码上下文、**污点路径步进图**（黄点源头、红点汇聚）、AI 判定卡（带置信度）。修复支持 diff 预览 → 应用（自动 .bak 备份）→ 一键回滚。扫描进度是逐文件实时推送，历史记录重启不丢。
 
----
+## CI 和自定义规则
 
-## AI Configuration
+GitHub Actions 一行接入：
 
-AICAudit supports multiple LLM providers for AI-powered verification.
-
-### Direct API
-
-```bash
-# OpenAI
-export AICAUDIT_AI_PROVIDER=openai
-export AICAUDIT_AI_KEY=sk-xxx
-aicaudit scan ./src --ai
-
-# Claude
-export AICAUDIT_AI_PROVIDER=claude
-export ANTHROPIC_API_KEY=sk-ant-xxx
-aicaudit scan ./src --ai
+```yaml
+- uses: IhateStomachProblems/aicaudit@main
+  with:
+    fail-on: error
+    sarif: "true"
 ```
 
-### Relay / Proxy Service (中转接口)
+自定义规则就是普通 Python 文件，丢进 `.aicaudit/rules/` 就生效，不用改核心代码，完整示例在 [examples/custom_rule_example.py](examples/custom_rule_example.py)。AI 接口支持 OpenAI 兼容中转、OpenAI、Claude、OpenRouter、本地 ollama，在 Web 界面的 AI Config 页点点就能配。
 
-Any OpenAI-compatible relay service works. Set the provider to `relay` and point to your relay endpoint:
+## 它做不到的
 
-```bash
-# Example: API2D, OhMyGPT, NewAPI, OneAPI, etc.
-export AICAUDIT_AI_PROVIDER=relay
-export AICAUDIT_AI_BASE=https://your-relay.com/v1
-export AICAUDIT_AI_KEY=sk-your-key
-export AICAUDIT_AI_MODEL=gpt-4o-mini
-aicaudit scan ./src --ai
-```
+- 目前**只支持 Python**。JS/TS 和 Go 在路线图里（[#3](https://github.com/IhateStomachProblems/aicaudit/issues/3)、[#4](https://github.com/IhateStomachProblems/aicaudit/issues/4)）。
+- 污点引擎基于 AST，闭包、元编程、C 扩展里的数据流追不到——这是这条技术路线的天然边界，不是没修的 bug。
+- AI 判定需要 API key 或本地模型，没有也行，静态部分全都能用。
+- 项目还年轻，会有漏报，也会偶尔烦你。两种情况都欢迎开 issue 骂我。
 
-Also accepts `custom` or `proxy` as provider names for the same behavior.
-
-### Local Models
-
-```bash
-export AICAUDIT_AI_PROVIDER=ollama
-aicaudit scan ./src --ai
-```
-
----
+徽章背后的数字：305 个测试、92% 覆盖率、ruff/mypy 零告警、Python 3.10–3.13 全线 CI，每次 push 都会在 Actions 里用 aicaudit 扫 aicaudit 自己。
 
 ## License
 
-MIT © IhateStomachProblems
-
----
-
-<div align="center">
-
----
-
-# AICAudit 中文版
-
-## 快速开始
-
-```bash
-# 从 PyPI 安装
-pip install aicaudit
-aicaudit scan ./项目目录    # 扫描项目
-aicaudit scan ./src --lang zh  # 使用中文输出
-aicaudit scan ./src --output json  # JSON 输出
-aicaudit scan ./src --output sarif  # SARIF 输出（GitHub Code Scanning 兼容）
-```
-
-## 规则列表
-
-**安全**：SQL注入检测、硬编码密钥检测、危险函数检测、路径遍历、SSRF、弱加密、XXE、不安全随机数
-**质量**：裸except、魔法数字、未定义变量、TODO注释、未使用变量
-**性能**：圈复杂度、嵌套深度
-
-## 行内抑制
-
-```python
-# 忽略特定规则
-query = f"SELECT * FROM users WHERE id={user_id}"  # aicaudit: ignore S001
-
-# 忽略该行所有规则
-eval(user_input)  # aicaudit: ignore
-```
-
-## GitHub Code Scanning 集成
-
-```bash
-aicaudit scan ./src --output sarif > aicaudit.sarif
-```
-
-在 GitHub Actions 中上传结果：
-
-```yaml
-- name: Run AICAudit
-  run: aicaudit scan . --output sarif > aicaudit.sarif
-
-- name: Upload SARIF
-  uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: aicaudit.sarif
-```
-
-## 注意事项
-
-- 目前仅支持 Python — 更多语言正在规划中
-- 纯静态分析，不是运行时安全工具
-- 没有工具能发现所有问题，请结合人工审查
-- 规则反映常见模式，可能不适用于所有代码库
-
-## 测试
-
-305 个单元测试，92% 代码覆盖率：污点引擎专项、AI 判定管线（fail-safe/重试/类别感知 prompt）、Web UI（SSE/pygments/修复回滚/会话持久化）、CI 退出码/init 向导/外部规则目录、CLI/JSON/Markdown/SARIF/中文输出全覆盖。
+MIT · [LICENSE](LICENSE)
