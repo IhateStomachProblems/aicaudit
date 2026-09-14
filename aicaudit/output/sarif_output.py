@@ -28,7 +28,7 @@ def _build_tool() -> dict:
     return {
         "driver": {
             "name": "AICAudit",
-            "version": "0.1.0",
+            "version": "0.2.0",
             "informationUri": "https://github.com/IhateStomachProblems/aicaudit",
             "rules": [
                 {

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aicaudit"
-version = "0.1.0"
+version = "0.2.0"
 description = "AI-powered code audit CLI for Python projects. Static analysis + AI verification with evidence chains."
 readme = "README.md"
 requires-python = ">=3.10"

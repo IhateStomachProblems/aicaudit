@@ -12,7 +12,7 @@ from aicaudit.scan import _import_all_rules, scan
 
 
 @click.group()
-@click.version_option("0.1.0")
+@click.version_option("0.2.0")
 def main():
     """AICAudit — AI-powered code audit for Python projects."""
 
