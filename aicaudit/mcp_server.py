@@ -149,10 +149,17 @@ def fix_preview_impl(file: str, rule_id: str, line: int, fix: str | None = None)
 
 
 def build_server():
-    """Create the FastMCP server (imported lazily so the extra stays optional)."""
-    from mcp.server.fastmcp import FastMCP
+    """Create the MCP server (imported lazily so the extra stays optional).
 
-    mcp = FastMCP("aicaudit")
+    Supports both MCP SDK generations: v1's FastMCP and v2's MCPServer share
+    the tool-registration surface used here.
+    """
+    try:
+        from mcp.server.fastmcp import FastMCP as Server
+    except ImportError:  # mcp 2.x renamed FastMCP -> MCPServer
+        from mcp.server.mcpserver import MCPServer as Server
+
+    mcp = Server("aicaudit")
 
     @mcp.tool()
     def scan(paths: list[str], rules: str | None = None,
