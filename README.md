@@ -64,6 +64,26 @@ aicaudit web                           # local web UI at 127.0.0.1:8080
 
 ---
 
+## Inside your AI editor (MCP + Skill)
+
+If you code with Claude Code, Cursor, Codex-style agents, or any MCP client, aicaudit ships as a first-class MCP server — "audit this project" becomes a tool call your agent can actually make, with taint paths it can read and reason about:
+
+```bash
+pip install aicaudit[mcp]
+```
+
+Then register it in your client's MCP config:
+
+```json
+{ "mcpServers": { "aicaudit": { "command": "aicaudit", "args": ["mcp"] } } }
+```
+
+Five tools: `scan` (findings with taint paths), `list_rules`, `verify` (three-state AI verdicts — `unverified` is never "safe"), `explain_finding` (hop-by-hop path + enclosing function), `fix_preview` (dry-run diff, writes nothing).
+
+There's also an official agent skill at [skill/SKILL.md](skill/SKILL.md) (standard SKILL.md format) that teaches any skill-aware harness when and how to use the tools, how to read a taint path, and what the limits are. Point your harness at the repo or copy the folder.
+
+---
+
 ## What it checks
 
 15 rules at the moment — 8 security, 5 quality, 2 performance. The security ones are where the taint engine earns its keep.
@@ -234,6 +254,24 @@ aicaudit web                     # 本地 Web 界面（127.0.0.1:8080）
 ```
 
 不需要配置文件，不需要编译 tree-sitter，不需要注册任何账号。
+
+## 在 AI 编辑器里用（MCP + Skill）
+
+用 Claude Code、Cursor、Codex 类 agent 写代码的，aicaudit 有官方 MCP server——"帮我审计这个项目"变成 agent 可以直接发起的工具调用，污点路径 agent 自己就能读懂：
+
+```bash
+pip install aicaudit[mcp]
+```
+
+在编辑器的 MCP 配置里注册：
+
+```json
+{ "mcpServers": { "aicaudit": { "command": "aicaudit", "args": ["mcp"] } } }
+```
+
+五个工具：`scan`（带污点路径的扫描）、`list_rules`、`verify`（三态 AI 判定，`unverified` 永远不等于"安全"）、`explain_finding`（逐跳路径 + 函数源码）、`fix_preview`（干跑 diff，不写盘）。
+
+另有官方 agent skill（[skill/SKILL.md](skill/SKILL.md)，标准 SKILL.md 格式），教会任何支持 skill 的 harness 什么时候调、怎么读污点路径、边界在哪。仓库拷过去即用。
 
 ## 它能查什么
 

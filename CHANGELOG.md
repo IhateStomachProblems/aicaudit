@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### MCP server + agent skill (harness integration)
+
+- `pip install aicaudit[mcp]` adds an official MCP server (`aicaudit mcp`, stdio):
+  `scan`, `list_rules`, `verify`, `explain_finding`, `fix_preview` — taint paths
+  and three-state AI verdicts are consumable directly by AI editors and agents
+- Agent skill at `skill/SKILL.md` (standard SKILL.md format) teaching skill-aware
+  harnesses when/how to use the tools and how to interpret a taint path
+
 ## v0.2.0 — Evidence-Driven AI Audit (2026-09-13)
 
 The "show your work" release: every security verdict now ships with a

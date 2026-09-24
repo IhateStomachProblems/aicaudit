@@ -32,6 +32,9 @@ dependencies = [
     "pygments>=2.16",
 ]
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+
 [project.urls]
 Homepage = "https://github.com/IhateStomachProblems/aicaudit"
 Repository = "https://github.com/IhateStomachProblems/aicaudit"

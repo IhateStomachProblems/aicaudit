@@ -19,12 +19,29 @@ def main():
 
 @main.command()
 @click.option("--host", default="127.0.0.1", help="Host to bind")
-@click.option("--port", default=8080, help="Port to bind")
+@click.option("--port", default=8080, help="Port to use")
 @click.option("--reload", is_flag=True, help="Auto-reload on changes")
 def web(host, port, reload):
     """Start AICAudit Web UI."""
     from aicaudit.web.server import run_server
     run_server(host=host, port=port, reload=reload)
+
+
+@main.command()
+def mcp():
+    """Run the MCP server (stdio) for AI-editor integration.
+
+    Requires the optional extra: pip install aicaudit[mcp]
+    """
+    try:
+        from aicaudit.mcp_server import main as mcp_main
+    except ImportError:
+        click.echo(
+            "The MCP server needs the optional 'mcp' package.\n"
+            "Install it with:  pip install aicaudit[mcp]",
+            err=True)
+        raise SystemExit(2)
+    mcp_main()
 
 
 
