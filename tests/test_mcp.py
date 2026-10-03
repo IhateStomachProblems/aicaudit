@@ -113,9 +113,8 @@ class TestServerWiring:
     def test_build_server_registers_five_tools(self):
         import asyncio
         server = build_server()
-        tools = asyncio.get_event_loop().run_until_complete(
-            server.list_tools()) if hasattr(server, "list_tools") else None
-        if tools is None:
-            pytest.skip("FastMCP list_tools API differs in this SDK version")
+        if not hasattr(server, "list_tools"):
+            pytest.skip("MCP SDK list_tools API not available")
+        tools = asyncio.run(server.list_tools())
         names = {t.name for t in tools}
         assert {"scan", "list_rules", "verify", "explain_finding", "fix_preview"} <= names

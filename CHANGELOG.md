@@ -1,14 +1,19 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 — Harness Integration (2026-10-04)
 
-### MCP server + agent skill (harness integration)
+The harness-era release: aicaudit stops being just a CLI you run and becomes
+a tool your AI editor calls for you.
+
+### MCP server + agent skill
 
 - `pip install aicaudit[mcp]` adds an official MCP server (`aicaudit mcp`, stdio):
   `scan`, `list_rules`, `verify`, `explain_finding`, `fix_preview` — taint paths
   and three-state AI verdicts are consumable directly by AI editors and agents
+  (Claude Code, Cursor, Codex-style clients, anything speaking MCP)
 - Agent skill at `skill/SKILL.md` (standard SKILL.md format) teaching skill-aware
   harnesses when/how to use the tools and how to interpret a taint path
+- Dual-generation MCP SDK compatibility (v1 FastMCP / v2 MCPServer)
 
 ## v0.2.0 — Evidence-Driven AI Audit (2026-09-13)
 

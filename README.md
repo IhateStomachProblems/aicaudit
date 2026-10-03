@@ -8,8 +8,8 @@
   <a href="https://pypi.org/project/aicaudit/"><img src="https://img.shields.io/pypi/v/aicaudit?color=6366f1&label=PyPI" alt="PyPI"/></a>
   <a href="https://github.com/IhateStomachProblems/aicaudit/actions/workflows/ci.yml"><img src="https://github.com/IhateStomachProblems/aicaudit/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <img src="https://img.shields.io/pypi/pyversions/aicaudit" alt="Python"/>
-  <img src="https://img.shields.io/badge/tests-305%20passed-brightgreen" alt="Tests"/>
-  <img src="https://img.shields.io/badge/coverage-92%25-brightgreen" alt="Coverage"/>
+  <img src="https://img.shields.io/badge/tests-315%20passed-brightgreen" alt="Tests"/>
+  <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/aicaudit?style=social" alt="Stars"/>
 </p>
@@ -213,7 +213,7 @@ Performance, for the curious (including interpreter startup, worst of 3 runs, Py
 
 ## The numbers behind the badges
 
-305 tests, 92% coverage, ruff and mypy clean, CI on Python 3.10–3.13. All of it runs in [Actions](https://github.com/IhateStomachProblems/aicaudit/actions) on every push, and the self-scan step audits aicaudit with aicaudit.
+315 tests, 91% coverage, ruff and mypy clean, CI on Python 3.10–3.13. All of it runs in [Actions](https://github.com/IhateStomachProblems/aicaudit/actions) on every push, and the self-scan step audits aicaudit with aicaudit.
 
 If you want to contribute: [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, the gates, and a note on why fixtures full of fake vulnerabilities live in `tests/` and `benchmarks/`.
 
@@ -319,7 +319,7 @@ GitHub Actions 一行接入：
 - AI 判定需要 API key 或本地模型，没有也行，静态部分全都能用。
 - 项目还年轻，会有漏报，也会偶尔烦你。两种情况都欢迎开 issue 骂我。
 
-徽章背后的数字：305 个测试、92% 覆盖率、ruff/mypy 零告警、Python 3.10–3.13 全线 CI，每次 push 都会在 Actions 里用 aicaudit 扫 aicaudit 自己。
+徽章背后的数字：315 个测试、91% 覆盖率、ruff/mypy 零告警、Python 3.10–3.13 全线 CI，每次 push 都会在 Actions 里用 aicaudit 扫 aicaudit 自己。
 
 ## License
 

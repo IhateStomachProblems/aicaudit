@@ -32,7 +32,7 @@ from aicaudit.scan import scan as run_scan
 
 HERE = Path(__file__).parent
 
-app = FastAPI(title="AICAudit", version="0.2.0", description="AI code audit web UI")
+app = FastAPI(title="AICAudit", version="0.3.0", description="AI code audit web UI")
 
 # Static files (vendored, no CDN)
 static_dir = HERE / "static"
