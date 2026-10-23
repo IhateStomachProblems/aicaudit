@@ -104,6 +104,46 @@ def _summary(s: dict) -> dict:
     }
 
 
+def _allowed_roots() -> list[Path]:
+    """Directory prefixes the web API may touch: session scan roots plus the
+    parents of files that appear in session findings."""
+    roots: list[Path] = []
+    for s in sessions.values():
+        for p in s.get("paths", []):
+            try:
+                roots.append(Path(p).resolve())
+            except OSError:
+                continue
+        for f in s.get("findings", []):
+            try:
+                roots.append(Path(f["file"]).resolve().parent)
+            except (OSError, KeyError):
+                continue
+    return roots
+
+
+def _guard_path(raw: str) -> Path:
+    """Reject file operations outside any session-scoped root (HTTP 403).
+
+    The web server is a local tool, but if it is ever bound to a non-loopback
+    host, unrestricted file endpoints would turn into arbitrary file
+    read/restore primitives. Every file-touching endpoint routes through this.
+    """
+    try:
+        resolved = Path(raw).resolve()
+    except OSError:
+        raise HTTPException(status_code=400, detail="Invalid path") from None
+    roots = _allowed_roots()
+    if not roots:
+        raise HTTPException(status_code=403,
+                            detail="No scan session yet — run a scan first")
+    for root in roots:
+        if resolved == root or root in resolved.parents:
+            return resolved
+    raise HTTPException(status_code=403,
+                        detail="Path is outside the scanned project roots")
+
+
 # ─── Pages ───────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -274,7 +314,7 @@ async def api_file_content(request: Request):
     except ValueError:
         pass
 
-    p = Path(path)
+    p = _guard_path(path)
     if not p.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     try:
@@ -424,6 +464,7 @@ def _finding_from_payload(body: dict):
     fix_text = body.get("fix")
     if not file_path or not fix_text:
         raise HTTPException(status_code=400, detail="Missing file or fix")
+    _guard_path(file_path)
     finding = Finding(
         rule_id=body.get("rule_id") or "UNKNOWN",
         message=body.get("message") or fix_text,
@@ -473,7 +514,7 @@ async def api_fix_rollback(request: Request):
     backup = body.get("backup", "")
     if not backup.endswith(".bak"):
         raise HTTPException(status_code=400, detail="backup must be a .bak file")
-    backup_path = Path(backup)
+    backup_path = _guard_path(backup)
     if not backup_path.is_file():
         raise HTTPException(status_code=404, detail="Backup not found")
     target = Path(str(backup_path)[:-4])

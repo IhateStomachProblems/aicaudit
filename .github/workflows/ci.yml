@@ -41,3 +41,22 @@ jobs:
 
       - name: Self-scan
         run: aicaudit scan aicaudit/
+
+  supply-chain:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Audit the resolved dependency tree
+        run: |
+          python -m venv .audit-env
+          .audit-env/bin/pip install --quiet --upgrade pip
+          .audit-env/bin/pip install --quiet ".[mcp]"
+          .audit-env/bin/pip install --quiet pip-audit
+          .audit-env/bin/python -m pip_audit
+

@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Security hardening (dependency + attack surface)
+
+- Dependency floors raised to patched versions: `jinja2>=3.1.5`
+  (CVE-2024-56201/56326 sandbox breakout), `fastapi>=0.161.0` and explicit
+  `starlette>=1.9.0` (CVE-2026-48710 "BadHost" host-header auth bypass,
+  CVE-2026-54283 DoS). Fresh-install tree audited clean via pip-audit.
+- Web UI: all file-touching endpoints (`/api/file-content`, fix
+  preview/apply/rollback) are now session-scoped — paths outside the scanned
+  project roots are rejected with 403. Previously, binding the server to a
+  non-loopback host would have exposed arbitrary file read/restore.
+- CI: new `supply-chain` job audits the resolved dependency tree with
+  pip-audit on every push; Dependabot enabled (pip + github-actions, weekly).
+
+### Performance
+
+- Taint engine: refinement rounds now early-exit on convergence (a round that
+  changes no summary and no override proves the fixed point; the analysis is
+  deterministic). End-to-end scan of this repo's own codebase: 0.97s → 0.74s;
+  single file 0.31s → 0.25s (Python 3.14, best of 3, same method before/after).
+- Source text parsed by the engine is reused by the scan pass instead of
+  re-reading every file from disk.
+- Benchmark accuracy unchanged: 8 security rules still 100% P/R.
+
+### Fixes
+
+- Test hygiene: the external-rule-override test no longer leaves a custom rule
+  registered as builtin S008 for the rest of the test session.
+
 ## v0.3.0 — Harness Integration (2026-10-04)
 
 The harness-era release: aicaudit stops being just a CLI you run and becomes

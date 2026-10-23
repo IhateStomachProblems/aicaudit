@@ -32,6 +32,7 @@ class TaintIndex:
         self._arg_states: dict[int, str] = {}
         self._call_events: dict[int, SinkEvent] = {}
         self._trees: dict[str, ast.Module] = {}
+        self._sources: dict[str, str] = {}
         self.events: list[SinkEvent] = []
 
     def add(self, analyzer: ScopeAnalyzer, tree: ast.Module, file: str) -> None:
@@ -42,6 +43,10 @@ class TaintIndex:
 
     def tree_for(self, file: str) -> ast.Module | None:
         return self._trees.get(file)
+
+    def source_for(self, file: str) -> str | None:
+        """Source text the engine parsed (lets callers skip re-reading disk)."""
+        return self._sources.get(file)
 
     def state_of(self, expr_node: ast.AST) -> str | None:
         """Abstract state of an expression node, or None if not recorded."""
@@ -60,7 +65,7 @@ class TaintEngine:
         self.summaries: dict[tuple[str, str], FuncSummary] = {}
 
     def analyze(self, files: list[Path]) -> TaintIndex:
-        # 1. parse all files once; keep trees + import tables
+        # 1. parse all files once; keep trees + sources + import tables
         parsed: dict[str, tuple[ast.Module, ImportTable]] = {}
         for fp in files:
             try:
@@ -69,6 +74,7 @@ class TaintEngine:
             except (OSError, SyntaxError):
                 continue
             parsed[str(fp)] = (tree, ImportTable.from_tree(tree))
+            self.index._sources[str(fp)] = source
         if not parsed:
             return self.index
 
@@ -84,11 +90,14 @@ class TaintEngine:
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     func_specs.append((file, node, table))
 
-        # 3. refinement rounds
+        # 3. refinement rounds — early-exit once a round stops changing
+        #    anything (the analysis is deterministic, so an unchanged round
+        #    means every later round would repeat it verbatim)
         analyses: dict[tuple[str, str], FuncAnalysis] = {}
         analyzers: list[tuple[ScopeAnalyzer, ast.Module, str]] = []
         module_analyzers: list[ScopeAnalyzer] = []
         overrides: dict[tuple[str, str], dict[str, VarInfo]] = {}
+        prev_fp: tuple | None = None
 
         for round_no in range(_ROUNDS):
             by_key = dict(analyses)
@@ -115,6 +124,19 @@ class TaintEngine:
                                                 param_overrides=ovr, summarize=summarize)
                 analyses[(file, node.name)] = fa
                 analyzers.append((analyzer, parsed[file][0], file))
+
+            fingerprint = (
+                tuple(sorted(
+                    (k, fa.summary.returns_tainted, fa.summary.return_can_be_const,
+                     tuple(sorted(fa.summary.return_param_deps)), len(fa.events))
+                    for k, fa in analyses.items())),
+                tuple(sorted(
+                    (k, p, v.state)
+                    for k, ovr in overrides.items() for p, v in ovr.items())),
+            )
+            if fingerprint == prev_fp:
+                break
+            prev_fp = fingerprint
 
         # 4. publish index from the final round
         for analyzer, tree, file in analyzers:

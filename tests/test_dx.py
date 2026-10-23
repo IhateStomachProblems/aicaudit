@@ -148,7 +148,15 @@ class TestExternalRules:
         (rules_dir / "override.py").write_text(rule, encoding="utf-8")
         (tmp_path / "app.py").write_text("print('x')\n", encoding="utf-8")
 
-        findings = scan([tmp_path / "app.py"], base_root=tmp_path)
+        from aicaudit.rules import base as rules_base
+        original = rules_base._registry.get("S008")
+        try:
+            findings = scan([tmp_path / "app.py"], base_root=tmp_path)
+        finally:
+            # the override stays in the global registry forever; restore the
+            # builtin so later tests (and any scan) see the real S008
+            if original is not None:
+                rules_base._registry["S008"] = original
         s008 = [f for f in findings if f.rule_id == "S008"]
         assert s008 and "overridden" in s008[0].message
 

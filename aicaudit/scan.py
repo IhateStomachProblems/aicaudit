@@ -188,10 +188,12 @@ def _print_summary(findings, file_count, elapsed, lang):
 def _scan_single_file(file_path, sel_rules, min_severity, lang, taint_index=None):
     """Scan one file with all rules, applying severity filter and inline suppressions."""
     tree = taint_index.tree_for(str(file_path)) if taint_index else None
-    try:
-        source = file_path.read_text(encoding="utf-8-sig", errors="replace")
-    except OSError:
-        return []
+    source = (taint_index.source_for(str(file_path)) if taint_index else None)
+    if source is None:
+        try:
+            source = file_path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            return []
     if tree is None:
         try:
             tree = ast.parse(source, filename=str(file_path))

@@ -59,6 +59,7 @@ class TestNewEndpoints:
         assert {"session_id", "timestamp", "total", "counts"}.issubset(first)
 
     def test_file_content_pygments_window(self, taint_file):
+        _scan(taint_file)     # file endpoints are session-scoped since the path guard
         resp = client.get("/api/file-content", params={"path": str(taint_file), "line": 4})
         assert resp.status_code == 200
         data = resp.json()
@@ -66,13 +67,24 @@ class TestNewEndpoints:
         assert "html" in data and 'class="n">conn<' in data["html"]
         assert 'class="hll"' in data["html"]      # target line emphasized
 
-    def test_file_content_missing_file_404(self):
-        resp = client.get("/api/file-content", params={"path": "nope.py", "line": 1})
+    def test_file_content_missing_file_404(self, tmp_path):
+        # register the root with a real scan, then ask for a file that isn't there
+        (tmp_path / "seed.py").write_text("import random\nrandom.random()\n", encoding="utf-8")
+        _scan(tmp_path / "seed.py")
+        resp = client.get("/api/file-content",
+                          params={"path": str(tmp_path / "nope.py"), "line": 1})
         assert resp.status_code == 404
+
+    def test_file_content_outside_roots_403(self, tmp_path):
+        secret = tmp_path / "elsewhere.py"
+        secret.write_text("x = 1\n", encoding="utf-8")
+        resp = client.get("/api/file-content", params={"path": str(secret), "line": 1})
+        assert resp.status_code == 403
 
     def test_fix_preview_diff(self, tmp_path):
         p = tmp_path / "fixable.py"
         p.write_text("eval(user_input)\ny = 1\n", encoding="utf-8")
+        _scan(p)
         resp = client.post("/api/fix-preview", json={
             "file": str(p), "rule_id": "S003", "line": 1, "fix": "# comment out",
             "severity": "error", "message": "eval",
@@ -82,10 +94,21 @@ class TestNewEndpoints:
         assert data["changed"]
         assert data["diff"] and "+#" in data["diff"]
 
+    def test_fix_outside_roots_403(self, tmp_path):
+        p = tmp_path / "unscanned.py"
+        p.write_text("eval(user_input)\n", encoding="utf-8")
+        resp = client.post("/api/apply-fix", json={
+            "file": str(p), "rule_id": "S003", "line": 1, "fix": "# x",
+            "severity": "error", "message": "eval",
+        })
+        assert resp.status_code == 403
+        assert "eval" in p.read_text(encoding="utf-8")   # untouched
+
     def test_fix_rollback_restores(self, tmp_path):
         p = tmp_path / "fixable.py"
         original = "eval(user_input)\ny = 1\n"
         p.write_text(original, encoding="utf-8")
+        _scan(p)
         apply = client.post("/api/apply-fix", json={
             "file": str(p), "rule_id": "S003", "line": 1, "fix": "# x",
             "severity": "error", "message": "eval",
@@ -95,6 +118,15 @@ class TestNewEndpoints:
         rb = client.post("/api/fix-rollback", json={"backup": apply["backup"]})
         assert rb.status_code == 200
         assert p.read_text(encoding="utf-8") == original
+
+    def test_fix_rollback_outside_roots_403(self, tmp_path):
+        victim = tmp_path / "victim.py"
+        victim.write_text("good = 1\n", encoding="utf-8")
+        bak = tmp_path / "victim.py.bak"
+        bak.write_text("evil = 2\n", encoding="utf-8")
+        resp = client.post("/api/fix-rollback", json={"backup": str(bak)})
+        assert resp.status_code == 403
+        assert victim.read_text(encoding="utf-8") == "good = 1\n"
 
     def test_fix_rollback_rejects_non_bak(self):
         resp = client.post("/api/fix-rollback", json={"backup": "important.py"})
@@ -223,6 +255,7 @@ class TestApplyFixApi:
     def test_apply_fix_writes_and_backs_up(self, tmp_path):
         p = tmp_path / "fixable.py"
         p.write_text("eval(user_input)\ny = 1\n", encoding="utf-8")
+        _scan(p)
         resp = client.post("/api/apply-fix", json={
             "file": str(p), "rule_id": "S003", "line": 1,
             "fix": "# TODO: refactor dangerous call",
