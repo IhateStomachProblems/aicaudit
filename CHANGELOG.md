@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 — Security Hardening (2026-11-21)
 
 ### Security hardening (dependency + attack surface)
 
