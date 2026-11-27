@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/coverage-91%25-brightgreen" alt="Coverage"/>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="License"/>
   <img src="https://img.shields.io/github/stars/IhateStomachProblems/aicaudit?style=social" alt="Stars"/>
+  <a href="https://glama.ai/mcp/servers/IhateStomachProblems/aicaudit"><img src="https://glama.ai/mcp/servers/IhateStomachProblems/aicaudit/badges/score.svg" alt="Glama"/></a>
 </p>
 
 ---
